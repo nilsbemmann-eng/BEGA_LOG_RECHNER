@@ -116,6 +116,7 @@ def _row_to_shipment(row: dict, field_to_column: dict[str, str]) -> Shipment:
     destination_text = get_raw("destination_address")
     freight_amount = get_decimal("freight_amount")
     pallets_raw = get_decimal("pallets")
+    unloading_point_count_raw = get_decimal("unloading_point_count")
 
     return Shipment(
         shipment_number=get_raw("shipment_number"),
@@ -126,4 +127,7 @@ def _row_to_shipment(row: dict, field_to_column: dict[str, str]) -> Shipment:
         loading_meters=get_decimal("loading_meters"),
         volume_m3=get_decimal("volume_m3"),
         invoice_amount=freight_amount,
+        # Anzahl Entladestellen (BEGA-Finetuning); ohne Spaltentreffer wird
+        # der Modell-Standardwert 1 angenommen (siehe app/models/shipment.py).
+        unloading_point_count=int(unloading_point_count_raw) if unloading_point_count_raw is not None else 1,
     )

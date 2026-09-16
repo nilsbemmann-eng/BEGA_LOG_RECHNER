@@ -23,6 +23,7 @@ export interface ShipmentOut {
   invoiced_km: string | null;
   invoice_amount: string | null;
   currency: string;
+  unloading_point_count: number;
 }
 
 export interface AuditRuleResultOut {

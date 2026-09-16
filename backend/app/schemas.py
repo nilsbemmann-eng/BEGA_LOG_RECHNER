@@ -82,6 +82,7 @@ class ShipmentOut(ORMModel):
     invoiced_km: Decimal | None
     invoice_amount: Decimal | None
     currency: str
+    unloading_point_count: int
 
 
 class ShipmentMatchRequest(BaseModel):

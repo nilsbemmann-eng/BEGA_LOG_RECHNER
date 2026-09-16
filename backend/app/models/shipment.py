@@ -33,6 +33,11 @@ class Shipment(Base, TimestampMixin):
     invoice_amount: Mapped[Money | None] = mapped_column(Numeric(12, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
 
+    # Anzahl Entladestellen (BEGA-Finetuning): die erste Entladestelle ist im
+    # Grund-/Fixfrachtpreis enthalten, ab der 2. faellt je Entladestelle ein
+    # Zuschlag an (siehe app/tariff_engine/engine.py, docs/OFFENE_ENTSCHEIDUNGEN.md).
+    unloading_point_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
     customer: Mapped["Customer | None"] = relationship()  # noqa: F821
     carrier: Mapped["Carrier | None"] = relationship()  # noqa: F821
     origin_address: Mapped["Address | None"] = relationship(foreign_keys=[origin_address_id])  # noqa: F821

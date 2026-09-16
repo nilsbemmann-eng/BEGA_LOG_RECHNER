@@ -40,6 +40,20 @@ def select_tariff_for_shipment(db: Session, carrier_id: str | None, transport_da
 
 
 def calculate_expected_price_for_tariff(
-    tariff: Tariff, reference_km: Decimal, allowed_surcharge_total: Decimal = Decimal("0")
+    tariff: Tariff,
+    reference_km: Decimal,
+    allowed_surcharge_total: Decimal = Decimal("0"),
+    origin_country: str | None = None,
+    destination_country: str | None = None,
+    unloading_point_count: int = 1,
+    default_additional_unloading_point_price: Decimal = Decimal("50"),
 ) -> ExpectedPriceBreakdown:
-    return calculate_expected_price(_to_dto(tariff), reference_km, allowed_surcharge_total)
+    return calculate_expected_price(
+        _to_dto(tariff),
+        reference_km,
+        allowed_surcharge_total,
+        origin_country=origin_country,
+        destination_country=destination_country,
+        unloading_point_count=unloading_point_count,
+        default_additional_unloading_point_price=default_additional_unloading_point_price,
+    )

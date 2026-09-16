@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     plausibility_max_weight_kg: float = 24000.0
     plausibility_max_loading_meters: float = 13.6
 
+    # --- Zuschlag "zusaetzliche Entladestelle" (BEGA-Finetuning, siehe
+    # docs/OFFENE_ENTSCHEIDUNGEN.md): einheitlicher Standardwert, je Tarif
+    # ueber TariffRule-Parameter "additional_unloading_point_price" ueberschreibbar.
+    default_additional_unloading_point_price_eur: float = 50.0
+
     # --- Aufbewahrung (Punkt 10 offene Entscheidungen) ---
     retention_days_documents: int | None = None
     retention_days_audit_results: int | None = None

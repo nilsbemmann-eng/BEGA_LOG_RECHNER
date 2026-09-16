@@ -14,6 +14,9 @@ from dataclasses import dataclass, field
 COLUMN_SYNONYMS: dict[str, list[str]] = {
     "shipment_number": ["sendung", "auftrag", "tour", "referenz"],
     "origin_address": ["absender", "beladestelle", "pickup", "abholadresse"],
+    # Muss vor "destination_address" geprueft werden: "entladestelle" (Adresse)
+    # ist als Teilstring auch in "Anzahl Entladestellen" (Zaehlfeld) enthalten.
+    "unloading_point_count": ["anzahl entladestellen", "anzahl der entladestellen", "entladestellenanzahl", "anzahl stopps"],
     "destination_address": ["empfaenger", "entladestelle", "delivery", "zustelladresse"],
     "weight_kg": ["gewicht", "brutto", "kg"],
     "pallets": ["paletten", "packstuecke", "colli", "kolli"],

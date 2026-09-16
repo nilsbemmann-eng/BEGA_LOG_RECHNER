@@ -26,3 +26,17 @@ def test_import_ladeliste_csv_maps_german_columns_and_keeps_unmapped(db_session,
     assert shipment.pallets == 5
     assert shipment.origin_address.original_text == "Hannover"
     assert shipment.destination_address.original_text == "Bremen"
+    assert shipment.unloading_point_count == 1  # keine Spalte vorhanden -> Standardwert
+
+
+def test_import_ladeliste_csv_reads_unloading_point_count(db_session, tmp_path):
+    csv_content = (
+        "Auftrag;Beladestelle;Entladestelle;Anzahl Entladestellen\n"
+        "A-2;Hannover;Bremen;3\n"
+    ).encode("utf-8-sig")
+
+    import_ladeliste(db_session, csv_content, "ladeliste.csv", str(tmp_path))
+    db_session.commit()
+
+    shipment = db_session.execute(select(Shipment)).scalars().one()
+    assert shipment.unloading_point_count == 3

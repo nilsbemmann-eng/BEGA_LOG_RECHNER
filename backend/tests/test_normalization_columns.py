@@ -19,3 +19,13 @@ def test_map_columns_keeps_first_match_when_duplicate_targets() -> None:
 
     assert result.field_to_column["shipment_number"] == "Sendung"
     assert "Referenz" in result.unmapped_columns
+
+
+def test_map_columns_distinguishes_unloading_point_count_from_destination_address() -> None:
+    # "Entladestelle" (Adresse) und "Anzahl Entladestellen" (Zaehlfeld,
+    # BEGA-Finetuning) duerfen sich nicht gegenseitig ueberschreiben.
+    header = ["Entladestelle", "Anzahl Entladestellen"]
+    result = map_columns(header)
+
+    assert result.column_to_field["Entladestelle"] == "destination_address"
+    assert result.column_to_field["Anzahl Entladestellen"] == "unloading_point_count"

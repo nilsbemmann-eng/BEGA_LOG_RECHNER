@@ -92,6 +92,10 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
               <div className="kv-label">Paletten</div>
               <div className="kv-value">{shipment.pallets ?? "-"}</div>
             </div>
+            <div>
+              <div className="kv-label">Entladestellen</div>
+              <div className="kv-value">{shipment.unloading_point_count}</div>
+            </div>
           </div>
         </div>
       )}

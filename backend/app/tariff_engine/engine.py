@@ -5,10 +5,28 @@ Framework-unabhaengig (keine SQLAlchemy-Modelle) und ausschliesslich mit
 Der Service-Layer wandelt ORM-`Tariff`/`TariffRule`-Objekte in `TariffDTO`
 um und ruft diese Funktionen auf.
 
-Im MVP wird ausschliesslich der Regeltyp `base_plus_km` berechnet. Alle
-weiteren in `TariffRuleType` vorbereiteten Regeltypen loesen bewusst
+Im MVP werden die Regeltypen `base_plus_km` und `all_in` berechnet (Stand:
+BEGA-Finetuning, siehe docs/OFFENE_ENTSCHEIDUNGEN.md). Alle weiteren in
+`TariffRuleType` vorbereiteten Regeltypen loesen bewusst
 `UnsupportedTariffRuleError` aus, statt eine falsche Berechnung
-vorzutaeuschen (siehe docs/OFFENE_ENTSCHEIDUNGEN.md, Punkt 4).
+vorzutaeuschen.
+
+BEGA-spezifische Preisregeln (Finetuning-Vorgabe):
+
+- `base_plus_km.parameters.price_per_km_by_country`: optionale Tabelle
+  `{"DE": "1.05", "AT": "1.25", ...}`. Sind sowohl Herkunfts- als auch
+  Zielland in der Tabelle enthalten, gilt der Satz des teureren Landes.
+  Fehlt ein Land in der Tabelle, faellt die Berechnung auf
+  `parameters.price_per_km` zurueck.
+- `all_in.parameters.prices`: Fixfracht-Preisliste je Laenderpaar
+  `[{"origin_country": "DE", "destination_country": "DE", "amount": "350.00"}, ...]`.
+  Wird nur verwendet, wenn die Sendung genau 1 Entladestelle hat
+  (`unloading_point_count == 1`) und ein passender Eintrag existiert; sonst
+  greift `base_plus_km`. Die Zuordnung erfolgt aktuell nur auf Land-Ebene,
+  nicht auf PLZ-Zonen-Ebene (dokumentierte MVP-Vereinfachung).
+- Ab der 2. Entladestelle faellt pro zusaetzlicher Entladestelle ein fixer
+  Zuschlag an (`additional_unloading_point_price`, Tarif-Parameter oder
+  globaler Standardwert aus `app/config.py`).
 """
 from __future__ import annotations
 
@@ -35,6 +53,10 @@ class UnsupportedTariffRuleError(Exception):
     """Der Regeltyp ist im Datenmodell vorbereitet, aber im MVP nicht berechenbar."""
 
 
+class MissingCountryRateError(Exception):
+    """Weder ein laenderspezifischer noch ein Standard-km-Preis ist hinterlegt (Abschnitt 14)."""
+
+
 @dataclass
 class TariffRuleDTO:
     rule_type: str
@@ -56,8 +78,11 @@ class ExpectedPriceBreakdown:
     base_amount: Decimal
     billable_km: Decimal
     km_amount: Decimal
+    price_per_km: Decimal | None
+    additional_stops_amount: Decimal
     surcharge_amount: Decimal
     total_amount: Decimal
+    pricing_method: str  # "all_in" (Fixfracht) | "base_plus_km"
 
 
 def select_applicable_tariff(tariffs: list[TariffDTO], transport_date: date, carrier_id: str | None = None) -> TariffDTO:
@@ -90,36 +115,109 @@ def _find_rule(tariff: TariffDTO, rule_type: str) -> TariffRuleDTO | None:
     return matching[0] if matching else None
 
 
+def _resolve_price_per_km(rule: TariffRuleDTO, countries_involved: set[str]) -> Decimal:
+    """Waehlt den km-Preis nach Land (BEGA-Finetuning).
+
+    Sind mehrere Laender an der Sendung beteiligt (z. B. Herkunfts- und
+    Zielland), gilt der Satz des teuersten hinterlegten Landes. Ist kein
+    beteiligtes Land in der Tabelle hinterlegt, greift der Standardsatz
+    `price_per_km`.
+    """
+    rate_table: dict = rule.parameters.get("price_per_km_by_country") or {}
+    matched_rates = [to_decimal(rate_table[country]) for country in countries_involved if country in rate_table]
+
+    if matched_rates:
+        return max(matched_rates)
+
+    default_rate = rule.parameters.get("price_per_km")
+    if default_rate is not None:
+        return to_decimal(default_rate)
+
+    raise MissingCountryRateError(
+        f"Kein km-Preis fuer die beteiligten Laender {sorted(countries_involved)} hinterlegt "
+        "und kein Standardsatz ('price_per_km') im Tarif konfiguriert."
+    )
+
+
+def _find_fixed_freight_amount(rule: TariffRuleDTO, origin_country: str | None, destination_country: str | None) -> Decimal | None:
+    """Fixfracht-Nachschlag fuer genau 1 Entladestelle (BEGA-Finetuning).
+
+    Aktuell auf Land-Ebene geschluesselt (kein PLZ-Zonen-Bezug), siehe
+    docs/OFFENE_ENTSCHEIDUNGEN.md.
+    """
+    for entry in rule.parameters.get("prices", []):
+        if entry.get("origin_country") == origin_country and entry.get("destination_country") == destination_country:
+            return to_decimal(entry["amount"])
+    return None
+
+
 def calculate_expected_price(
-    tariff: TariffDTO, reference_km: Decimal, allowed_surcharge_total: Decimal = Decimal("0")
+    tariff: TariffDTO,
+    reference_km: Decimal,
+    allowed_surcharge_total: Decimal = Decimal("0"),
+    origin_country: str | None = None,
+    destination_country: str | None = None,
+    unloading_point_count: int = 1,
+    default_additional_unloading_point_price: Decimal = Decimal("50"),
 ) -> ExpectedPriceBreakdown:
-    """Grundformel aus Abschnitt 6.3:
+    """Sollpreisberechnung inkl. BEGA-Finetuning (mehrere Entladestellen,
+    laenderabhaengiger km-Preis, Fixfracht):
 
         Abrechnungs-km = max(Referenz-km, Mindest-km)
-        Netto-Sollpreis = Grundpreis + Abrechnungs-km * Kilometerpreis + zulaessige Zusatzfrachten
+        Basispreis = Fixfracht (bei 1 Entladestelle, falls hinterlegt)
+                     sonst Grundpreis + Abrechnungs-km * Kilometerpreis(Land)
+        Netto-Sollpreis = Basispreis
+                          + Zuschlag_zusaetzliche_Entladestellen
+                          + zulaessige Zusatzfrachten
     """
-    rule = _find_rule(tariff, "base_plus_km")
-    if rule is None:
-        raise UnsupportedTariffRuleError(
-            f"Tarif {tariff.id} enthaelt keine 'base_plus_km'-Regel und keinen anderen im MVP "
-            "unterstuetzten Regeltyp."
-        )
+    additional_stops = max(unloading_point_count - 1, 0)
+    countries_involved = {c for c in (origin_country, destination_country) if c}
 
-    base_price = to_decimal(rule.parameters["base_price"])
-    price_per_km = to_decimal(rule.parameters["price_per_km"])
-    minimum_km = to_decimal(rule.parameters.get("minimum_km", "0"))
+    base_plus_km_rule = _find_rule(tariff, "base_plus_km")
+    fixed_freight_rule = _find_rule(tariff, "all_in")
 
-    billable_km = max(reference_km, minimum_km)
-    km_amount = billable_km * price_per_km
-    total = base_price + km_amount + allowed_surcharge_total
+    fixed_freight_amount = None
+    if unloading_point_count == 1 and fixed_freight_rule is not None:
+        fixed_freight_amount = _find_fixed_freight_amount(fixed_freight_rule, origin_country, destination_country)
+
+    price_per_km: Decimal | None = None
+    if fixed_freight_amount is not None:
+        pricing_method = "all_in"
+        base_amount = fixed_freight_amount
+        billable_km = Decimal("0")
+        km_amount = Decimal("0")
+    else:
+        if base_plus_km_rule is None:
+            raise UnsupportedTariffRuleError(
+                f"Tarif {tariff.id} enthaelt weder eine passende 'all_in'-Fixfracht noch eine "
+                "'base_plus_km'-Regel."
+            )
+        pricing_method = "base_plus_km"
+        base_price = to_decimal(base_plus_km_rule.parameters.get("base_price", "0"))
+        minimum_km = to_decimal(base_plus_km_rule.parameters.get("minimum_km", "0"))
+        price_per_km = _resolve_price_per_km(base_plus_km_rule, countries_involved)
+
+        billable_km = max(reference_km, minimum_km)
+        km_amount = billable_km * price_per_km
+        base_amount = base_price
+
+    additional_unloading_point_price = default_additional_unloading_point_price
+    if base_plus_km_rule is not None and "additional_unloading_point_price" in base_plus_km_rule.parameters:
+        additional_unloading_point_price = to_decimal(base_plus_km_rule.parameters["additional_unloading_point_price"])
+    additional_stops_amount = additional_unloading_point_price * additional_stops
+
+    total = base_amount + km_amount + additional_stops_amount + allowed_surcharge_total
 
     return ExpectedPriceBreakdown(
         tariff_id=tariff.id,
-        base_amount=round_money(base_price),
+        base_amount=round_money(base_amount),
         billable_km=billable_km,
         km_amount=round_money(km_amount),
+        price_per_km=price_per_km,
+        additional_stops_amount=round_money(additional_stops_amount),
         surcharge_amount=round_money(allowed_surcharge_total),
         total_amount=round_money(total),
+        pricing_method=pricing_method,
     )
 
 

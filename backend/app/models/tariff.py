@@ -18,9 +18,11 @@ class TariffStatus(str, enum.Enum):
 class TariffRuleType(str, enum.Enum):
     """Regeltypen aus Abschnitt 6.1.
 
-    Nur `BASE_PLUS_KM` wird im MVP tatsaechlich berechnet
-    (`app/tariff_engine/engine.py`). Die uebrigen Typen sind im Datenmodell
-    vorbereitet, ihre Berechnung ist eine dokumentierte Erweiterung
+    `BASE_PLUS_KM` (mit optionaler laenderabhaengiger km-Preistabelle) und
+    `ALL_IN` (als Fixfracht-Preisliste je Laenderpaar, nur bei 1 Entladestelle)
+    werden im MVP tatsaechlich berechnet (`app/tariff_engine/engine.py`,
+    BEGA-Finetuning). Die uebrigen Typen sind im Datenmodell vorbereitet, ihre
+    Berechnung ist eine dokumentierte Erweiterung
     (siehe docs/OFFENE_ENTSCHEIDUNGEN.md, Punkt 4).
     """
 

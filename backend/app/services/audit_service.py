@@ -99,7 +99,15 @@ def run_audit(
             tariff_orm = select_tariff_for_shipment(db, shipment.carrier_id, shipment.transport_date)
             tariff_found = True
             price_reference_km = reference_km if reference_km is not None else (shipment.invoiced_km or Decimal("0"))
-            breakdown = calculate_expected_price_for_tariff(tariff_orm, price_reference_km, allowed_surcharge_total)
+            breakdown = calculate_expected_price_for_tariff(
+                tariff_orm,
+                price_reference_km,
+                allowed_surcharge_total,
+                origin_country=shipment.origin_address.country_code if shipment.origin_address else None,
+                destination_country=shipment.destination_address.country_code if shipment.destination_address else None,
+                unloading_point_count=shipment.unloading_point_count,
+                default_additional_unloading_point_price=Decimal(str(settings.default_additional_unloading_point_price_eur)),
+            )
             expected_amount = breakdown.total_amount
         except (TariffNotFoundError, MultipleTariffsValidError) as exc:
             tariff_error_message = str(exc)
