@@ -58,6 +58,15 @@ class UnsupportedFileFormatError(AppError):
     retryable = False
 
 
+class EmailFileCorruptError(AppError):
+    """Entspricht 'Anhang beschaedigt' aus Abschnitt 14, hier fuer die
+    hochgeladene E-Mail-Datei selbst (z. B. eine ungueltige .msg-Datei)."""
+
+    error_code = "email_file_corrupt"
+    status_code = 422
+    retryable = False
+
+
 class OcrProviderUnavailableError(AppError):
     error_code = "ocr_provider_unavailable"
     status_code = 502

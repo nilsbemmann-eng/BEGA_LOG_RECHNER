@@ -93,7 +93,10 @@ Umgesetzt:
 1. Datenmodell fuer alle in Abschnitt 9 geforderten Entitaeten inkl. Alembic-Migration.
 2. Austauschbare Provider-Schnittstellen fuer E-Mail (IMAP), OCR (PDF-Text/Tabellen
    via `pdfplumber`), Dokumentklassifikation (stichwortbasiert), Geocoding
-   (OpenStreetMap Nominatim), Routing (OSRM) und Export (XLSX/CSV).
+   (OpenStreetMap Nominatim), Routing (OSRM) und Export (XLSX/CSV). Zusaetzlich
+   zum IMAP-Postfach koennen einzelne Outlook-`.msg`-Dateien manuell hochgeladen
+   werden (`POST /api/emails/upload`, Dashboard-Upload-Formular) und durchlaufen
+   dieselbe Verarbeitung wie eine per IMAP abgeholte E-Mail.
 3. Deutsche Zahlenformat-Normalisierung und konfigurierbare Ladeliste-Spaltenerkennung.
 4. Mehrkriterien-Sendungszuordnung mit Protokollierung der Zuordnungsentscheidung.
 5. Kilometerabweichungspruefung mit konfigurierbaren Toleranzen und Routing-Cache.

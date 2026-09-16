@@ -1,4 +1,4 @@
-import type { AuditHistoryFilters, AuditResultOut, EmailOut, ExportOut, ShipmentOut } from "./types";
+import type { AuditHistoryFilters, AuditResultOut, EmailOut, EmailUploadResult, ExportOut, ShipmentOut } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -11,6 +11,20 @@ function resolveBaseUrl(): string {
   return typeof window === "undefined" ? API_BASE_URL : "";
 }
 
+/** Liest die einheitliche Fehlerantwort aus Abschnitt 14 (`ErrorResponse`
+ * in backend/app/schemas.py) aus, falls vorhanden, sonst einen generischen Text. */
+async function extractErrorMessage(response: Response, path: string): Promise<string> {
+  try {
+    const body = await response.json();
+    if (body && typeof body.message === "string") {
+      return body.message;
+    }
+  } catch {
+    // Antwort war kein JSON - generische Meldung verwenden.
+  }
+  return `API-Fehler ${response.status} bei ${path}`;
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${resolveBaseUrl()}${path}`, {
     // MVP-Backend hat noch keine Session-Auth (siehe app/auth.py) - der Server
@@ -18,7 +32,7 @@ async function apiGet<T>(path: string): Promise<T> {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(`API-Fehler ${response.status} bei ${path}`);
+    throw new Error(await extractErrorMessage(response, path));
   }
   return response.json() as Promise<T>;
 }
@@ -30,7 +44,17 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`API-Fehler ${response.status} bei ${path}`);
+    throw new Error(await extractErrorMessage(response, path));
+  }
+  return response.json() as Promise<T>;
+}
+
+async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${resolveBaseUrl()}${path}`, { method: "POST", body: formData });
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, path));
   }
   return response.json() as Promise<T>;
 }
@@ -70,6 +94,12 @@ export function createExport(auditResultIds: string[], fileFormat: "xlsx" | "csv
  * same-origin Navigation, die von `next.config.js` zum Backend proxied wird. */
 export function exportDownloadUrl(downloadUrl: string): string {
   return downloadUrl;
+}
+
+/** Laedt eine Outlook-.msg-Datei hoch (Abschnitt 4.1/4.2) - wird serverseitig
+ * genauso verarbeitet wie eine per IMAP abgeholte E-Mail. */
+export function uploadEmailFile(file: File): Promise<EmailUploadResult> {
+  return apiUpload<EmailUploadResult>("/api/emails/upload", file);
 }
 
 export { API_BASE_URL };

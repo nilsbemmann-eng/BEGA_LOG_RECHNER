@@ -34,6 +34,13 @@ class EmailSyncResult(BaseModel):
     duplicate_count: int
 
 
+class EmailUploadResult(BaseModel):
+    email_id: str | None
+    is_duplicate: bool
+    subject: str
+    attachment_count: int
+
+
 # --- Dokumente -----------------------------------------------------------------
 
 

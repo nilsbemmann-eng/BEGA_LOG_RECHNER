@@ -76,3 +76,10 @@ export interface ExportOut {
   storage_reference: string;
   download_url: string;
 }
+
+export interface EmailUploadResult {
+  email_id: string | null;
+  is_duplicate: boolean;
+  subject: string;
+  attachment_count: number;
+}

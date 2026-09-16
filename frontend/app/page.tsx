@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MsgUploadForm } from "../components/MsgUploadForm";
 import { StatusBadge } from "../components/StatusBadge";
 import { fetchAudits, fetchEmails, fetchShipments } from "../lib/api";
 import type { AuditResultOut, EmailOut, ShipmentOut } from "../lib/types";
@@ -60,6 +61,8 @@ export default async function DashboardPage() {
     <>
       <h1>Dashboard</h1>
       <p className="subtitle">Abschnitt 12.1 - Uebersicht ueber Importe und Pruefungen</p>
+
+      <MsgUploadForm />
 
       <div className="stat-grid">
         <div className="stat-card">
