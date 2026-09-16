@@ -35,6 +35,19 @@ def build_ocr_provider(settings: Settings) -> DocumentOcrProvider:
         return PdfTextOcrProvider()
     if settings.ocr_provider == "dummy":
         return DummyOcrProvider()
+    if settings.ocr_provider == "llm_vision":
+        from app.providers.ocr.llm_vision_provider import LlmVisionOcrProvider
+
+        if not settings.anthropic_api_key:
+            raise ValueError(
+                "ocr_provider=llm_vision benoetigt ANTHROPIC_API_KEY als Umgebungsvariable "
+                "bzw. ueber das Secret-Management."
+            )
+        return LlmVisionOcrProvider(
+            api_key=settings.anthropic_api_key,
+            model=settings.ocr_vision_model,
+            max_pages=settings.ocr_vision_max_pages,
+        )
     raise ValueError(f"Unbekannter ocr_provider: {settings.ocr_provider}")
 
 

@@ -12,7 +12,7 @@ markierten Punkte mit dem Fachbereich final festgelegt werden.
 |---|---|---|---|
 | 1 | Welches E-Mail-System wird verwendet? | Offen fuer die automatische Postfach-Synchronisation. `EmailProvider`-Interface implementiert, MVP liefert einen generischen IMAP-Provider (`app/providers/email/imap_provider.py`). Zugangsdaten ausschließlich über Umgebungsvariablen/Secret-Management (`MAILBOX_*`). Ergaenzend koennen einzelne Outlook-`.msg`-Dateien manuell hochgeladen werden (`POST /api/emails/upload`, `app/providers/email/msg_file_parser.py`) - unabhaengig vom konfigurierten Postfach, fuer den Fall dass IMAP-Zugang (noch) nicht eingerichtet ist oder eine einzelne E-Mail gezielt nachgereicht werden soll. | `app/providers/base.py`, `app/providers/email/` |
 | 2 | Welche Dokumenttypen liegen tatsächlich vor? | MVP deckt alle 9 Typen aus Abschnitt 4.3 als Enum ab; Klassifikator ist stichwortbasiert und konfigurierbar. | `app/models/document.py::DocumentType`, `app/providers/classification/keyword_classifier.py` |
-| 3 | Welche OCR-Qualität ist erforderlich? | Offen. MVP enthält `DocumentOcrProvider`-Interface plus zwei Implementierungen: einen Text-/Tabellen-Extraktor für PDFs mit Textebene (`pdf_text_provider.py`) und einen `DummyOcrProvider` für Tests. Cloud-OCR (Azure Document Intelligence, AWS Textract, Google Document AI) oder Tesseract für gescannte Bilder ist als Erweiterung vorgesehen, aber nicht produktiv angebunden. | `app/providers/ocr/` |
+| 3 | Welche OCR-Qualität ist erforderlich? | Fuer Scans/Fotos umgesetzt: `LlmVisionOcrProvider` (`ocr_provider=llm_vision`) nutzt ein multimodales Claude-Modell zur Felderkennung inkl. Begründung je Feld (Abschnitt 19); Zahlen werden weiterhin deterministisch über `app/normalization/numbers.py` normalisiert, nicht vom Modell selbst berechnet. Daneben weiterhin: `PdfTextOcrProvider` fuer PDFs mit Textebene und `DummyOcrProvider` fuer Tests. Offen: welches Modell/welcher Anbieter produktiv gesetzt wird (Kosten pro Dokument, Datenschutz bei Versand an einen externen Dienst) sowie ob zusaetzlich ein guenstigerer klassischer OCR-Anbieter (Tesseract, Azure/AWS/Google) fuer einfache Faelle sinnvoll ist. | `app/providers/ocr/` |
 | 4 | Welche Frachtführer und Tarifmodelle müssen zuerst unterstützt werden? | Fachlich präzisiert (BEGA-Finetuning, siehe Abschnitt "BEGA-Preislogik" unten): bis zu 100 Subunternehmer mit individuellem km-Preis (`Tariff.carrier_id`, je Frachtführer eigener Tarif); `BASE_PLUS_KM` mit optionaler länderabhängiger km-Preistabelle sowie `ALL_IN` als Fixfracht-Preisliste je Länderpaar (nur bei 1 Entladestelle) werden berechnet. Weitere Regeltypen bleiben als Enum vorbereitet, aber nicht berechnet (siehe `TariffRuleType`). | `app/models/tariff.py`, `app/tariff_engine/engine.py` |
 | 5 | Werden Kilometer nach Lkw-, Pkw- oder vertraglicher Route berechnet? | Startwert: Lkw-Route (`profile=truck`), konfigurierbar je Tarif/Sendung über `routing_profile`. Referenzrouten für alle drei Varianten können parallel gespeichert werden (`RoutingResult.routing_profile`). | `app/models/routing.py`, `app/providers/routing/` |
 | 6 | Welche Toleranzen gelten je Relation? | Startwerte aus Abschnitt 5.3 (±8 % Standard, ±12 % Innenstadt/schwer zugänglich, Sonderfälle → manuelle Prüfung), konfigurierbar über `DistanceToleranceConfig`. | `app/distance_engine/deviation.py`, `app/config.py` |
@@ -85,6 +85,31 @@ Auf Rückfrage wurden folgende Praxisregeln bestätigt und wie folgt umgesetzt
 - **Bis zu 100 Subunternehmer**: unterstützt ohne Codeänderung - jeder
   Subunternehmer ist ein `Carrier`-Datensatz mit eigenem/eigenen `Tariff`(en)
   und damit eigenem km-Preis/eigener Fixfracht-Tabelle.
+
+## Scan-Erkennung und Unterschriften (Finetuning-Gespräch)
+
+- **Vision-LLM-OCR**: `app/providers/ocr/llm_vision_provider.py` erkennt
+  Felder auf Scans/Fotos (nicht nur PDFs mit Textebene) über ein multimodales
+  Claude-Modell, inkl. kurzer Begründung je Feld (`ExtractedField.source_text`)
+  und ehrlich eingeschätzter Konfidenz (high/medium/low, siehe
+  `_CONFIDENCE_BY_LEVEL`). Bewusstes Architekturprinzip (Abschnitt 19): das
+  Modell liest nur ab, es rechnet nicht - Zahlen werden serverseitig
+  deterministisch über den gleichen Parser normalisiert wie beim
+  PDF-Text-Provider.
+- **Unterschriftenerkennung (perspektivisch)**: erster Schritt bereits
+  umgesetzt - pro Seite wird eine reine Anwesenheitserkennung
+  (`signature_present: true/false`) als `ExtractedField` gespeichert, z. B.
+  fuer die Nachweis-Prüfung bei Ablieferbelegen. **Nicht** enthalten und noch
+  offen:
+  - Lokalisierung der Unterschrift (Bounding Box) auf der Seite.
+  - Verifikation/Abgleich gegen eine hinterlegte Referenzunterschrift
+    (Identitaetspruefung) - das waere ein eigenes, deutlich aufwendigeres
+    Feature (spezialisiertes Modell oder Cloud-Dienst) und nur sinnvoll, wenn
+    die reine Anwesenheitspruefung in der Praxis nicht ausreicht.
+- **Kosten/Datenschutz**: jede Scan-Seite wird als Bild an die Anthropic-API
+  gesendet. Vor Produktivbetrieb klären: Kosten pro Dokument/Seite (begrenzt
+  ueber `OCR_VISION_MAX_PAGES`), Auftragsverarbeitungsvertrag mit Anthropic,
+  und ob personenbezogene Daten auf den Scans das zulassen (Abschnitt 13).
 
 **Grundsatz:** Kein Fall wird aufgrund eines fehlenden Nachweises oder eines
 niedrigen OCR-Konfidenzwerts automatisch endgültig abgelehnt. Das Ergebnis ist

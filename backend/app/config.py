@@ -49,9 +49,18 @@ class Settings(BaseSettings):
     default_routing_profile: str = "truck"  # siehe docs/OFFENE_ENTSCHEIDUNGEN.md Punkt 5
 
     # --- OCR-Provider ---
-    ocr_provider: str = "pdf_text"  # pdf_text | dummy (siehe docs/OFFENE_ENTSCHEIDUNGEN.md Punkt 3)
+    # pdf_text: nur PDFs mit eingebetteter Textebene (kein echter Scan).
+    # llm_vision: Claude-Vision-basierte Erkennung fuer Scans/Fotos, benoetigt
+    # ANTHROPIC_API_KEY (siehe docs/OFFENE_ENTSCHEIDUNGEN.md Punkt 3).
+    # dummy: fuer Tests.
+    ocr_provider: str = "pdf_text"
     ocr_min_auto_confidence: float = 0.95
     ocr_min_flagged_confidence: float = 0.80
+
+    # --- Vision-LLM-OCR (nur bei ocr_provider=llm_vision) ---
+    anthropic_api_key: str | None = None
+    ocr_vision_model: str = "claude-sonnet-5"
+    ocr_vision_max_pages: int = 5
 
     # --- Kilometertoleranzen (Abschnitt 5.3), konfigurierbar ---
     km_tolerance_standard_percent: float = 8.0

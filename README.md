@@ -92,11 +92,15 @@ Umgesetzt:
 
 1. Datenmodell fuer alle in Abschnitt 9 geforderten Entitaeten inkl. Alembic-Migration.
 2. Austauschbare Provider-Schnittstellen fuer E-Mail (IMAP), OCR (PDF-Text/Tabellen
-   via `pdfplumber`), Dokumentklassifikation (stichwortbasiert), Geocoding
-   (OpenStreetMap Nominatim), Routing (OSRM) und Export (XLSX/CSV). Zusaetzlich
-   zum IMAP-Postfach koennen einzelne Outlook-`.msg`-Dateien manuell hochgeladen
-   werden (`POST /api/emails/upload`, Dashboard-Upload-Formular) und durchlaufen
-   dieselbe Verarbeitung wie eine per IMAP abgeholte E-Mail.
+   via `pdfplumber` fuer PDFs mit Textebene; Claude-Vision-basierte Erkennung
+   fuer Scans/Fotos inkl. Begruendung je Feld und erster
+   Unterschriften-Anwesenheitserkennung, siehe
+   `app/providers/ocr/llm_vision_provider.py`), Dokumentklassifikation
+   (stichwortbasiert), Geocoding (OpenStreetMap Nominatim), Routing (OSRM) und
+   Export (XLSX/CSV). Zusaetzlich zum IMAP-Postfach koennen einzelne
+   Outlook-`.msg`-Dateien manuell hochgeladen werden (`POST /api/emails/upload`,
+   Dashboard-Upload-Formular) und durchlaufen dieselbe Verarbeitung wie eine
+   per IMAP abgeholte E-Mail.
 3. Deutsche Zahlenformat-Normalisierung und konfigurierbare Ladeliste-Spaltenerkennung.
 4. Mehrkriterien-Sendungszuordnung mit Protokollierung der Zuordnungsentscheidung.
 5. Kilometerabweichungspruefung mit konfigurierbaren Toleranzen und Routing-Cache.
@@ -131,8 +135,9 @@ Zusatzfrachtpruefung → Pruefregel-Engine → Benutzeroberflaeche → Tests.
 Naechste sinnvolle Schritte fuer den produktiven Einsatz:
 
 - OIDC-Anbindung anstelle des Auth-Platzhalters in `app/auth.py`.
-- Bild-OCR-Provider (Tesseract/Azure/AWS/Google) fuer gescannte Dokumente
-  ohne PDF-Textebene ergaenzen.
+- Unterschriftenerkennung ueber reine Anwesenheitspruefung hinaus erweitern
+  (Lokalisierung, Verifikation gegen Referenzunterschrift), falls in der
+  Praxis benoetigt - siehe docs/OFFENE_ENTSCHEIDUNGEN.md.
 - Verschluesselten Object Store statt lokalem Dateisystem anbinden (`app/storage.py`).
 - Hintergrundjob-Queue (Redis/RabbitMQ) fuer E-Mail-Sync, OCR, Routing, Import, Export.
 - Weitere Tarifregeltypen (Relation, Gewichtsstaffel, Zone, ...) in
