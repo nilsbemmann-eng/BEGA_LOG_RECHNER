@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { StatusBadge } from "../components/StatusBadge";
 import { fetchAudits, fetchEmails, fetchShipments } from "../lib/api";
 import type { AuditResultOut, EmailOut, ShipmentOut } from "../lib/types";
+
+const RECENT_AUDITS_LIMIT = 6;
 
 async function loadDashboardData(): Promise<
   | { ok: true; emails: EmailOut[]; shipments: ShipmentOut[]; audits: AuditResultOut[] }
@@ -99,6 +102,27 @@ export default async function DashboardPage() {
         Dokumenten-Listen-Endpunkt, der im MVP-API-Vertrag (Abschnitt 11) noch
         nicht vorgesehen ist.
       </p>
+
+      <h2>Letzte Pruefungen</h2>
+      {audits.length === 0 ? (
+        <div className="empty-state">Noch keine Pruefergebnisse vorhanden.</div>
+      ) : (
+        <div className="audit-card-grid">
+          {audits.slice(0, RECENT_AUDITS_LIMIT).map((audit) => (
+            <Link key={audit.id} href={`/historie/${audit.id}`} className="audit-card">
+              <div className="audit-card-header">
+                <span>{audit.shipment_number ?? audit.shipment_id}</span>
+                <StatusBadge status={audit.status} />
+              </div>
+              <div className="kv-label">{audit.carrier_name ?? "Frachtfuehrer unbekannt"}</div>
+              <div className="audit-card-footer">
+                <span>{audit.transport_date ?? "-"}</span>
+                <span>{audit.difference_amount ? `${audit.difference_amount} EUR Abweichung` : "keine Abweichung"}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <Link href="/historie">Zur Historie (Suche &amp; Export) &rarr;</Link>
     </>
