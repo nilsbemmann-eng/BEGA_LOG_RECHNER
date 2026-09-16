@@ -1,0 +1,35 @@
+## Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+## Node / Frontend
+node_modules/
+.next/
+out/
+frontend/dist/
+frontend/.env.local
+
+## Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+## Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+## Database / storage (local dev only)
+backend/local_storage/
+*.sqlite3
+postgres-data/
