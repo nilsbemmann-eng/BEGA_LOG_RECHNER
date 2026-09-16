@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_geocoding_provider, get_routing_provider
@@ -13,6 +13,8 @@ from app.database import get_db
 from app.errors import NotFoundError
 from app.models.audit import AuditResult, AuditStatus
 from app.models.audit_log import AuditLogEntry
+from app.models.party import Carrier
+from app.models.shipment import Shipment
 from app.models.user import User, UserRole
 from app.providers.base import GeocodingProvider, RoutingProvider
 from app.schemas import AuditDecisionRequest, AuditResultOut, AuditRunRequest
@@ -36,8 +38,45 @@ def run_audit_endpoint(
 
 
 @router.get("", response_model=list[AuditResultOut])
-def list_audits(db: Session = Depends(get_db)) -> list[AuditResult]:
-    return list(db.execute(select(AuditResult).order_by(AuditResult.created_at.desc())).scalars().all())
+def list_audits(
+    db: Session = Depends(get_db),
+    status: AuditStatus | None = Query(default=None, description="Filter nach Pruefstatus"),
+    q: str | None = Query(
+        default=None,
+        description="Freitextsuche ueber Sendungsnummer, Transportauftrags-/Rechnungsnummer und Frachtfuehrername",
+    ),
+    carrier_id: str | None = Query(default=None, description="Filter nach Frachtfuehrer"),
+    date_from: date | None = Query(default=None, description="Transportdatum von (einschliesslich)"),
+    date_to: date | None = Query(default=None, description="Transportdatum bis (einschliesslich)"),
+) -> list[AuditResult]:
+    """Historie der Pruefergebnisse (Abschnitt 12) mit Such- und Filterfunktion."""
+    query = (
+        select(AuditResult)
+        .join(Shipment, AuditResult.shipment_id == Shipment.id)
+        .outerjoin(Carrier, Shipment.carrier_id == Carrier.id)
+    )
+
+    if status is not None:
+        query = query.where(AuditResult.status == status)
+    if carrier_id is not None:
+        query = query.where(Shipment.carrier_id == carrier_id)
+    if date_from is not None:
+        query = query.where(Shipment.transport_date >= date_from)
+    if date_to is not None:
+        query = query.where(Shipment.transport_date <= date_to)
+    if q:
+        like_pattern = f"%{q.strip()}%"
+        query = query.where(
+            or_(
+                Shipment.shipment_number.ilike(like_pattern),
+                Shipment.transport_order_number.ilike(like_pattern),
+                Shipment.invoice_number.ilike(like_pattern),
+                Carrier.name.ilike(like_pattern),
+            )
+        )
+
+    query = query.order_by(AuditResult.created_at.desc())
+    return list(db.execute(query).scalars().unique().all())
 
 
 @router.get("/{audit_result_id}", response_model=AuditResultOut)

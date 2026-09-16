@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span className="top-nav-brand">BEGA Frachtpreisrechner</span>
             <div className="top-nav-links">
               <Link href="/">Dashboard</Link>
-              <Link href="/audits">Pruefungen</Link>
+              <Link href="/historie">Historie</Link>
             </div>
           </div>
         </nav>

@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # --- Export ---
     export_storage_path: str = "./local_storage/exports"
 
+    # --- CORS: kommagetrennte Liste erlaubter Frontend-Origins ---
+    cors_allowed_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:

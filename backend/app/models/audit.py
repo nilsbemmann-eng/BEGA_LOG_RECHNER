@@ -62,6 +62,21 @@ class AuditResult(Base, TimestampMixin):
         back_populates="audit_result", cascade="all, delete-orphan"
     )
 
+    # Nur lesende Komfort-Properties fuer die Historie (Abschnitt 12, Suche/Export) -
+    # keine eigenen Spalten, damit Tarifaenderungen weiterhin keine bestehenden
+    # Pruefergebnisse veraendern (Abschnitt 6.2).
+    @property
+    def shipment_number(self) -> str | None:
+        return self.shipment.shipment_number if self.shipment else None
+
+    @property
+    def carrier_name(self) -> str | None:
+        return self.shipment.carrier.name if self.shipment and self.shipment.carrier else None
+
+    @property
+    def transport_date(self):  # noqa: ANN201 - Rueckgabetyp date | None, siehe Shipment.transport_date
+        return self.shipment.transport_date if self.shipment else None
+
 
 class AuditRuleResult(Base, TimestampMixin):
     """Einzelergebnis einer Pruefregel (Tabelle 8.1) innerhalb eines `AuditResult`."""

@@ -206,6 +206,9 @@ class AuditRuleResultOut(ORMModel):
 class AuditResultOut(ORMModel):
     id: str
     shipment_id: str
+    shipment_number: str | None
+    carrier_name: str | None
+    transport_date: date | None
     tariff_id: str | None
     reference_distance_km: Decimal | None
     invoiced_distance_km: Decimal | None
@@ -215,6 +218,7 @@ class AuditResultOut(ORMModel):
     difference_percent: Decimal | None
     status: str
     explanation: str
+    created_at: datetime
     rule_results: list[AuditRuleResultOut] = []
 
 
@@ -244,6 +248,7 @@ class ExportOut(BaseModel):
     file_format: str
     row_count: int
     storage_reference: str
+    download_url: str
 
 
 # --- Fehler -----------------------------------------------------------------

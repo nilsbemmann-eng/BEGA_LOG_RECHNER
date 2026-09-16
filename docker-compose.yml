@@ -30,9 +30,15 @@ services:
       - backend-storage:/app/local_storage
 
   frontend:
-    build: ./frontend
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    build:
+      context: ./frontend
+      # Beide Werte werden von Next.js beim Build ausgewertet (siehe
+      # frontend/Dockerfile) - "backend" ist der Compose-Servicename, ueber
+      # den der Frontend-Container das Backend im internen Docker-Netzwerk
+      # erreicht (nicht "localhost").
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://backend:8000
+        BACKEND_INTERNAL_URL: http://backend:8000
     depends_on:
       - backend
     ports:

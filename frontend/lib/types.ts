@@ -46,6 +46,9 @@ export type AuditStatus =
 export interface AuditResultOut {
   id: string;
   shipment_id: string;
+  shipment_number: string | null;
+  carrier_name: string | null;
+  transport_date: string | null;
   tariff_id: string | null;
   reference_distance_km: string | null;
   invoiced_distance_km: string | null;
@@ -55,5 +58,21 @@ export interface AuditResultOut {
   difference_percent: string | null;
   status: AuditStatus;
   explanation: string;
+  created_at: string;
   rule_results: AuditRuleResultOut[];
+}
+
+export interface AuditHistoryFilters {
+  q?: string;
+  status?: AuditStatus;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface ExportOut {
+  export_id: string;
+  file_format: string;
+  row_count: number;
+  storage_reference: string;
+  download_url: string;
 }

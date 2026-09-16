@@ -100,7 +100,7 @@ export default async function DashboardPage() {
         nicht vorgesehen ist.
       </p>
 
-      <Link href="/audits">Alle Pruefungen ansehen &rarr;</Link>
+      <Link href="/historie">Zur Historie (Suche &amp; Export) &rarr;</Link>
     </>
   );
 }

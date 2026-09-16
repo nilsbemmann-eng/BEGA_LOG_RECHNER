@@ -13,7 +13,10 @@ Offene, noch zu bestaetigende Geschaeftsregeln: [`docs/OFFENE_ENTSCHEIDUNGEN.md`
 ## Architektur
 
 ```text
-frontend/   Next.js/TypeScript-Oberflaeche (Dashboard, Pruefungsliste, Pruefdetail)
+frontend/   Next.js/TypeScript-Oberflaeche (Dashboard, Historie mit Suche/Export, Pruefdetail).
+            Client-seitige Aufrufe gehen an denselben Origin unter /api/* und
+            werden per next.config.js-Rewrite serverseitig zum Backend
+            weitergeleitet (kein CORS noetig, siehe BACKEND_INTERNAL_URL).
 backend/    FastAPI/Python-Backend
   app/models/            SQLAlchemy-Datenmodell (Abschnitt 9)
   app/providers/         Austauschbare Schnittstellen: E-Mail, OCR, Klassifikation,
@@ -101,9 +104,12 @@ Umgesetzt:
 9. FastAPI-Endpunkte gemaess Abschnitt 11, inkl. einheitlicher Fehlerantworten
    (Abschnitt 14) und rollenbasierter Freigabe-/Rueckfrage-Aktionen (Abschnitt 3).
 10. Audit-Log fuer OCR-Korrekturen, Sendungszuordnungen, Freigaben und Rueckfragen.
-11. Next.js-Frontend mit Dashboard, Pruefungsliste und Pruefdetail (Abschnitt 12).
-12. pytest-Suite: Unit-Tests je Engine plus ein End-to-End-API-Test des
-    vollstaendigen Audit-Durchlaufs.
+11. Next.js-Frontend mit Dashboard, Historie (Suche nach Sendung/Auftrag/
+    Rechnung/Frachtfuehrer, Status- und Zeitraumfilter, Export nach XLSX/CSV
+    mit direktem Download) und Pruefdetail (Abschnitt 12).
+12. pytest-Suite: Unit-Tests je Engine plus End-to-End-API-Tests des
+    vollstaendigen Audit-Durchlaufs sowie der Historie-Suche und des
+    Exports/Downloads.
 
 Bewusst nicht im MVP (siehe Abschnitt 1.2, 15 und `docs/OFFENE_ENTSCHEIDUNGEN.md`):
 automatische Zahlungsfreigabe, ERP/D365-Integration, vollstaendige
