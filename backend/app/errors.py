@@ -136,6 +136,15 @@ class TourOriginMatrixImportFailedError(AppError):
     retryable = False
 
 
+class CarrierRateMatrixImportFailedError(AppError):
+    """Die hochgeladene "Stammdaten"-Excel-Datei entspricht nicht der
+    erwarteten Spaltenstruktur (siehe app/services/carrier_rate_import_service.py)."""
+
+    error_code = "carrier_rate_matrix_import_failed"
+    status_code = 422
+    retryable = False
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:  # noqa: ARG001

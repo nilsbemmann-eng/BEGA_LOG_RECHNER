@@ -24,7 +24,7 @@ from app.services.address_service import geocode_address_if_needed, is_precisely
 from app.services.routing_service import get_or_calculate_route
 from app.services.surcharge_service import evaluate_and_persist_claim
 from app.services.tariff_service import calculate_expected_price_for_tariff, select_tariff_for_shipment
-from app.services.tour_origin_service import resolve_tour_origin_address
+from app.services.tour_origin_service import resolve_special_agreement_surcharge, resolve_tour_origin_address
 from app.tariff_engine.engine import MultipleTariffsValidError, TariffNotFoundError, calculate_price_deviation
 
 # Ladelisten-PDFs werden ueber eine strikte Tabellen-/Regex-Extraktion
@@ -232,6 +232,17 @@ def run_tour_audit(
     "Anzahl Entladestellen" wird ueber eindeutige (PLZ, Ort)-Paare der
     Sendungen dieser Tour gezaehlt (Namensvarianten derselben Adresse zaehlen
     nicht doppelt, siehe `app/services/ladeliste_pdf_parser.py`).
+
+    Preisformel entspricht der realen, bislang manuell in Excel gepflegten
+    BEGA-Tour-Preisformel ("Preise_2026_fuer_Wolke.xlsm", siehe
+    docs/OFFENE_ENTSCHEIDUNGEN.md): km-Preis (inkl. Praefix-Ausnahmen,
+    `prefix_country_rate_overrides`) + Entladestellen-Zuschlag + Maut
+    (`Tour.toll_km * Settings.default_toll_rate_per_km_eur`) +
+    Sondervereinbarungs-Zuschlag (`SpecialAgreementSurcharge`), aufgerundet
+    auf den vollen Euro. Keine Fixfracht-Preisliste je Laenderpaar
+    (`use_fixed_freight=False`). Genehmigungsregel ist einseitig:
+    Rechnungsbetrag darf den Sollpreis nicht uebersteigen, ein niedrigerer
+    Betrag ist unbegrenzt unproblematisch (kein Toleranzband).
     """
     tour = db.get(Tour, tour_id)
     if tour is None:
@@ -323,6 +334,15 @@ def run_tour_audit(
                     destination_country=destination_country,
                     unloading_point_count=unloading_point_count,
                     default_additional_unloading_point_price=Decimal(str(settings.default_additional_unloading_point_price_eur)),
+                    tour_number_prefix=tour.tour_number[:2],
+                    toll_km=tour.toll_km or Decimal("0"),
+                    toll_rate_per_km=Decimal(str(settings.default_toll_rate_per_km_eur)),
+                    special_agreement_surcharge=resolve_special_agreement_surcharge(db, tour.tour_number),
+                    # Die reale Tour-Preisformel kennt keine Fixfracht-Preisliste je
+                    # Laenderpaar, nur den kilometerbasierten Pfad (siehe
+                    # docs/OFFENE_ENTSCHEIDUNGEN.md).
+                    use_fixed_freight=False,
+                    round_total_up_to_whole_unit=True,
                 )
                 expected_amount = breakdown.total_amount
             except (TariffNotFoundError, MultipleTariffsValidError) as exc:
@@ -354,6 +374,9 @@ def run_tour_audit(
         tariff_error_message=tariff_error_message,
         price_difference_percent=price_difference_percent,
         price_tolerance_percent=Decimal(str(settings.price_deviation_tolerance_percent)),
+        # Reale Tour-Preisformel (siehe docs/OFFENE_ENTSCHEIDUNGEN.md): kein
+        # Toleranzband, der Rechnungsbetrag darf den Sollpreis nicht uebersteigen.
+        price_tolerance_mode="invoice_must_not_exceed_expected",
         surcharge_statuses=[],
         is_duplicate=False,
         weight_kg=total_weight_kg or None,

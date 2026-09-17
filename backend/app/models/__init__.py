@@ -12,6 +12,7 @@ from app.models.mailbox import Mailbox
 from app.models.party import Carrier, Customer
 from app.models.routing import RoutingResult
 from app.models.shipment import Shipment
+from app.models.special_agreement_surcharge import SpecialAgreementSurcharge
 from app.models.surcharge import SurchargeClaim, SurchargeStatus, SurchargeType
 from app.models.tariff import Tariff, TariffRule, TariffRuleType, TariffStatus
 from app.models.tour import Tour
@@ -42,6 +43,7 @@ __all__ = [
     "Mailbox",
     "RoutingResult",
     "Shipment",
+    "SpecialAgreementSurcharge",
     "SurchargeClaim",
     "SurchargeStatus",
     "SurchargeType",

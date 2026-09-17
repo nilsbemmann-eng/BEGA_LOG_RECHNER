@@ -292,6 +292,23 @@ class TourOriginMatrixImportResult(BaseModel):
     imported_count: int
 
 
+class CarrierRateMatrixImportResult(BaseModel):
+    imported_count: int
+
+
+class SpecialAgreementSurchargeCreate(BaseModel):
+    tour_number_prefix: str
+    amount: Decimal
+    note: str | None = None
+
+
+class SpecialAgreementSurchargeOut(ORMModel):
+    id: str
+    tour_number_prefix: str
+    amount: Decimal
+    note: str | None
+
+
 # --- Audits -----------------------------------------------------------------
 
 

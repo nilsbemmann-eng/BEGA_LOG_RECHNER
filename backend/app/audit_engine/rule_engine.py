@@ -75,6 +75,12 @@ class AuditRuleInput:
     # Preis
     price_difference_percent: Decimal | None
     price_tolerance_percent: Decimal
+    # "symmetric_percent" (Standard, Abschnitt 8.1): |Abweichung| <= Toleranz-%.
+    # "invoice_must_not_exceed_expected" (reale BEGA-Tour-Preisformel, siehe
+    # docs/OFFENE_ENTSCHEIDUNGEN.md): Rechnungsbetrag darf den Sollpreis in
+    # KEINER Hoehe uebersteigen (kein Toleranzband), ein niedrigerer
+    # Rechnungsbetrag ist dagegen unbegrenzt unproblematisch.
+    price_tolerance_mode: str = "symmetric_percent"
 
     # Zuschlag / Nachweis
     surcharge_statuses: list[str] = field(default_factory=list)  # Werte aus SurchargeEvaluationStatus
@@ -183,6 +189,19 @@ def _check_tariff(data: AuditRuleInput) -> RuleOutcome:
 def _check_price(data: AuditRuleInput) -> RuleOutcome:
     if data.price_difference_percent is None:
         return RuleOutcome("price_limit", "Preis", RuleStatus.MANUAL_REVIEW, None, None, "Sollpreis konnte nicht berechnet werden.")
+
+    if data.price_tolerance_mode == "invoice_must_not_exceed_expected":
+        if data.price_difference_percent <= 0:
+            return RuleOutcome(
+                "price_limit", "Preis", RuleStatus.PASSED, f"{data.price_difference_percent:.2f} %",
+                "<= 0 %", "Rechnungsbetrag liegt nicht ueber dem Sollpreis.",
+            )
+        return RuleOutcome(
+            "price_limit", "Preis", RuleStatus.FAILED, f"{data.price_difference_percent:.2f} %", "<= 0 %",
+            f"Rechnungsbetrag liegt {data.price_difference_percent:.2f} % ueber dem Sollpreis - "
+            "die reale Tour-Preisformel kennt kein Toleranzband nach oben.",
+        )
+
     if abs(data.price_difference_percent) <= data.price_tolerance_percent:
         return RuleOutcome(
             "price_limit", "Preis", RuleStatus.PASSED, f"{data.price_difference_percent:.2f} %",

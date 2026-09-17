@@ -177,3 +177,88 @@ in diesen Fällen immer `MANUELLE_PRÜFUNG` (siehe `app/audit_engine/`).
   Teilstrecken kann geringfügig von einer echten Rundtour-Optimierung
   abweichen). Ohne auflösbaren Startpunkt bleibt die Kilometerprüfung
   `MANUELLE_PRUEFUNG`, die Preis-/Tarifprüfung läuft davon unabhängig weiter.
+
+## Reale Tour-Preisformel (Finetuning: "Preise_2026_fuer_Wolke.xlsm")
+
+Der Nutzer hat BEGAs aktuelles, manuell in Excel gepflegtes Preisprüfblatt für
+2026 bereitgestellt (ein Tabellenblatt je Kalenderwoche + Stammdaten). Die
+darin enthaltenen Formeln sind die tatsächliche, bislang manuelle
+Geschäftslogik und wurden 1:1 nachgebaut (`app/tariff_engine/engine.py`,
+`app/services/audit_service.py::run_tour_audit`), soweit automatisierbar:
+
+```
+FrachtpreisBEGA = ROUNDUP(
+    stops_surcharge(Spedition, alleStops)
+  + Gesamtstrecke * €/km(Spedition, Praefix, Land)
+  + MautstreckeGermany * 0,158 €/km
+  + Sondervereinbarung_Zuschlag(Praefix)
+, 0)
+
+genehmigt = "Ok" wenn FrachtpreisBEGA >= Frachtpreisallin (Rechnungsbetrag), sonst "notok"
+```
+
+Wichtigste Unterschiede zur vorherigen MVP-Annahme (jetzt korrigiert):
+
+- **Keine Fixfracht/`all_in`-Preisliste je Länderpaar** in der realen Formel -
+  `run_tour_audit` ruft `calculate_expected_price(..., use_fixed_freight=False)`
+  auf, sodass Touren immer über den kilometerbasierten Pfad (`base_plus_km`)
+  berechnet werden. Die `all_in`-Regel bleibt im Datenmodell erhalten (falls
+  doch einmal eine echte Fixfracht-Vereinbarung existiert), wird aber für
+  Touren nicht mehr automatisch verwendet.
+- **Maut-Kosten**: neues Feld `Tour.toll_km` (mautpflichtige Teilstrecke in
+  Deutschland, analog zu `MautstreckeGermany`) × `Settings.default_toll_rate_per_km_eur`
+  (Standard 0,158 EUR/km). Frachtführer mit `toll_exempt: true` im
+  `base_plus_km`-Tarifparameter (real: BABINSKI, SANMAR) zahlen keine Maut.
+  `toll_km` wird aktuell nicht automatisch berechnet (keine
+  Land-Zuordnung je Streckenabschnitt in der Routing-Engine) - Eingabe manuell
+  oder aus einer künftigen Anbindung an das im Excel referenzierte
+  "BegaPlanningModul" (Tour-Planungssoftware), **offen**.
+- **Sondervereinbarungs-Zuschlag**: neues Stammdaten-Modell
+  `SpecialAgreementSurcharge` (Praefix -> fixer Betrag, CRUD über
+  `/api/special-agreement-surcharges`) statt hart codierter Präfix-Liste im
+  Excel (real: 19, 36, 46, 52, 57, 79, 28, 15, je 100 EUR) - damit ohne
+  Codeänderung pflegbar.
+- **Carrier-spezifischer Entladestellen-Zuschlag** (real: BABINSKI 60 EUR,
+  MAGPOL 70 EUR, Zieja 0 EUR, sonst 50 EUR) war über
+  `TariffRule.parameters["additional_unloading_point_price"]` bereits
+  abbildbar - nur die tatsächlichen Werte müssen je Frachtführer-Tarif
+  gepflegt werden.
+- **Manuelle Praefix+Land-Sonder-km-Sätze**: neuer Tarifparameter
+  `base_plus_km.parameters.prefix_country_rate_overrides` (siehe
+  `app/tariff_engine/engine.py`) für Ausnahmen wie PAWLICHA+Präfix 78+DE
+  → 1,30 EUR/km statt Standardsatz. **Offene Frage, nicht vom Nutzer
+  beantwortet**: die Ausnahmeliste unterscheidet sich zwischen den
+  Excel-Tabellenblättern `BLANKO` (3 Ausnahmen) und `Vergleich` (dieselben 3
+  plus eine zusätzliche PASTERNAK+Präfix{29,78}+AT-Regel) - es wurde die
+  **Vereinigungsmenge** beider Listen als Ausgangsbasis übernommen
+  (pragmatische Annahme, da vollständiger als beide Einzellisten); vor
+  Produktivbetrieb mit dem Nutzer verifizieren, welche Liste aktuell gültig
+  ist.
+- **Genehmigungsregel ist einseitig, ohne Toleranzband**: neuer
+  `AuditRuleInput.price_tolerance_mode = "invoice_must_not_exceed_expected"`
+  (siehe `app/audit_engine/rule_engine.py`) - der Rechnungsbetrag darf den
+  Sollpreis in keiner Höhe übersteigen (`FAILED`), ein niedrigerer Betrag ist
+  unbegrenzt unproblematisch (`PASSED`). Wird bislang nur von
+  `run_tour_audit` verwendet; `run_audit` (Einzelsendungen aus CSV/XLSX-Import)
+  bleibt beim bisherigen symmetrischen Prozent-Toleranzband, da für diesen
+  Ablauf keine gegenteilige reale Evidenz vorliegt.
+- **Rundung auf den vollen Euro (`ROUNDUP`)**: neue Hilfsfunktion
+  `app/money.py::round_up_to_whole_currency_unit` (kaufmännisches Runden auf
+  2 Nachkommastellen bleibt für alle anderen Preisberechnungen im Projekt
+  unverändert Standard) - nur `run_tour_audit` rundet den Gesamt-Sollpreis
+  wie im Excel auf den nächsten vollen Euro auf.
+- **Frachtführer-Preistabelle ("Stammdaten")**: ca. 90 Frachtführer × ca. 52
+  Länder EUR/km-Matrix, importierbar über
+  `POST /api/tariffs/import-rate-matrix` (.xlsm/.xlsx,
+  `app/services/carrier_rate_import_service.py`). Nicht-numerische Zellen
+  ("keine" = kein Service, "zu teuer", "Sonderregelung", "?") werden bewusst
+  übersprungen statt als 0 interpretiert. Jeder Import legt pro Frachtführer
+  eine neue Tarifversion an (Tarife sind unveränderlich, siehe
+  `app/models/tariff.py`) und übernimmt `additional_unloading_point_price`/
+  `toll_exempt`/`prefix_country_rate_overrides` der vorherigen Version
+  unverändert, da diese Parameter nicht aus der Stammdaten-Tabelle stammen.
+- **`Gesamtstrecke`/`MautstreckeGermany` sind im heutigen manuellen Prozess
+  extern befüllt** (vermutlich aus dem im Excel referenzierten
+  "BegaPlanningModul", einer separaten Tourenplanungssoftware), nicht live
+  berechnet - unsere OSM/OSRM-basierte automatische Kilometerermittlung ist
+  also eine echte Weiterentwicklung, keine Nachbildung des Ist-Zustands.

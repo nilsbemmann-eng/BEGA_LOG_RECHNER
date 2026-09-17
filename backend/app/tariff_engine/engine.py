@@ -27,6 +27,31 @@ BEGA-spezifische Preisregeln (Finetuning-Vorgabe):
 - Ab der 2. Entladestelle faellt pro zusaetzlicher Entladestelle ein fixer
   Zuschlag an (`additional_unloading_point_price`, Tarif-Parameter oder
   globaler Standardwert aus `app/config.py`).
+
+Reale Preisformel aus "Preise_2026_fuer_Wolke.xlsm" (BEGA-Finetuning,
+Tour-Preispruefung, siehe docs/OFFENE_ENTSCHEIDUNGEN.md): das tatsaechlich
+von BEGA manuell genutzte Excel-Berechnungsblatt enthaelt zusaetzliche
+Komponenten, die hier ergaenzt wurden:
+
+- `base_plus_km.parameters.prefix_country_rate_overrides`: Liste
+  `[{"tour_number_prefix": "78", "destination_countries": ["DE","DEU","D"],
+     "price_per_km": "1.35"}, ...]` - manuell verhandelte Sonder-km-Saetze
+  fuer bestimmte Frachtfuehrer+Ladelisten-Praefix+Zielland-Kombinationen,
+  die Vorrang vor `price_per_km_by_country` haben (echte Ausnahmen aus dem
+  Excel, z. B. PAWLICHA+Praefix 78+Deutschland -> 1,30 EUR/km statt des
+  Standardsatzes).
+- `base_plus_km.parameters.toll_exempt`: bool, Frachtfuehrer ohne Maut-Kosten
+  (im Excel: BABINSKI, SANMAR).
+- Maut-Kosten = `toll_km * toll_rate_per_km` (Standard 0,158 EUR/km,
+  `Settings.default_toll_rate_per_km_eur`), addiert zum Sollpreis, ausser bei
+  `toll_exempt`.
+- Sondervereinbarungs-Zuschlag: ein fixer Betrag je Ladelisten-Praefix
+  (`SpecialAgreementSurcharge`-Stammdaten, siehe
+  `app/services/tour_origin_service.py`), unabhaengig von km/Entladestellen,
+  wird als `special_agreement_surcharge`-Parameter uebergeben.
+- `use_fixed_freight=False` deaktiviert die `all_in`-Fixfracht-Pruefung
+  vollstaendig: die reale Tour-Preisformel kennt keine Fixfracht-Preisliste
+  je Laenderpaar, nur den kilometerbasierten Pfad.
 """
 from __future__ import annotations
 
@@ -34,7 +59,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from app.money import round_money, to_decimal
+from app.money import round_money, round_up_to_whole_currency_unit, to_decimal
 
 
 class TariffNotFoundError(Exception):
@@ -81,6 +106,8 @@ class ExpectedPriceBreakdown:
     price_per_km: Decimal | None
     additional_stops_amount: Decimal
     surcharge_amount: Decimal
+    toll_amount: Decimal
+    special_agreement_amount: Decimal
     total_amount: Decimal
     pricing_method: str  # "all_in" (Fixfracht) | "base_plus_km"
 
@@ -115,14 +142,37 @@ def _find_rule(tariff: TariffDTO, rule_type: str) -> TariffRuleDTO | None:
     return matching[0] if matching else None
 
 
-def _resolve_price_per_km(rule: TariffRuleDTO, countries_involved: set[str]) -> Decimal:
+def _resolve_prefix_override_rate(
+    rule: TariffRuleDTO, tour_number_prefix: str | None, countries_involved: set[str]
+) -> Decimal | None:
+    """Manuell verhandelte Sonder-km-Saetze je Praefix+Zielland (siehe
+    Moduldocstring: reale Ausnahmen aus dem BEGA-Excel), haben Vorrang vor
+    `price_per_km_by_country`."""
+    if not tour_number_prefix:
+        return None
+    for entry in rule.parameters.get("prefix_country_rate_overrides", []):
+        if entry.get("tour_number_prefix") != tour_number_prefix:
+            continue
+        if countries_involved & set(entry.get("destination_countries", [])):
+            return to_decimal(entry["price_per_km"])
+    return None
+
+
+def _resolve_price_per_km(
+    rule: TariffRuleDTO, countries_involved: set[str], tour_number_prefix: str | None = None
+) -> Decimal:
     """Waehlt den km-Preis nach Land (BEGA-Finetuning).
 
-    Sind mehrere Laender an der Sendung beteiligt (z. B. Herkunfts- und
-    Zielland), gilt der Satz des teuersten hinterlegten Landes. Ist kein
-    beteiligtes Land in der Tabelle hinterlegt, greift der Standardsatz
-    `price_per_km`.
+    Prueft zuerst manuelle Praefix+Land-Ausnahmen (`prefix_country_rate_overrides`),
+    dann die laenderabhaengige Preistabelle: sind mehrere Laender an der
+    Sendung beteiligt (z. B. Herkunfts- und Zielland), gilt der Satz des
+    teuersten hinterlegten Landes. Ist kein beteiligtes Land in der Tabelle
+    hinterlegt, greift der Standardsatz `price_per_km`.
     """
+    override_rate = _resolve_prefix_override_rate(rule, tour_number_prefix, countries_involved)
+    if override_rate is not None:
+        return override_rate
+
     rate_table: dict = rule.parameters.get("price_per_km_by_country") or {}
     matched_rates = [to_decimal(rate_table[country]) for country in countries_involved if country in rate_table]
 
@@ -159,15 +209,24 @@ def calculate_expected_price(
     destination_country: str | None = None,
     unloading_point_count: int = 1,
     default_additional_unloading_point_price: Decimal = Decimal("50"),
+    tour_number_prefix: str | None = None,
+    toll_km: Decimal = Decimal("0"),
+    toll_rate_per_km: Decimal = Decimal("0.158"),
+    special_agreement_surcharge: Decimal = Decimal("0"),
+    use_fixed_freight: bool = True,
+    round_total_up_to_whole_unit: bool = False,
 ) -> ExpectedPriceBreakdown:
     """Sollpreisberechnung inkl. BEGA-Finetuning (mehrere Entladestellen,
-    laenderabhaengiger km-Preis, Fixfracht):
+    laenderabhaengiger km-Preis, Fixfracht, Maut, Sondervereinbarung):
 
         Abrechnungs-km = max(Referenz-km, Mindest-km)
-        Basispreis = Fixfracht (bei 1 Entladestelle, falls hinterlegt)
-                     sonst Grundpreis + Abrechnungs-km * Kilometerpreis(Land)
+        Basispreis = Fixfracht (bei 1 Entladestelle, falls hinterlegt und
+                     use_fixed_freight=True)
+                     sonst Grundpreis + Abrechnungs-km * Kilometerpreis(Land/Praefix)
         Netto-Sollpreis = Basispreis
                           + Zuschlag_zusaetzliche_Entladestellen
+                          + Maut (toll_km * toll_rate_per_km, ausser toll_exempt)
+                          + Sondervereinbarungs-Zuschlag
                           + zulaessige Zusatzfrachten
     """
     additional_stops = max(unloading_point_count - 1, 0)
@@ -177,7 +236,7 @@ def calculate_expected_price(
     fixed_freight_rule = _find_rule(tariff, "all_in")
 
     fixed_freight_amount = None
-    if unloading_point_count == 1 and fixed_freight_rule is not None:
+    if use_fixed_freight and unloading_point_count == 1 and fixed_freight_rule is not None:
         fixed_freight_amount = _find_fixed_freight_amount(fixed_freight_rule, origin_country, destination_country)
 
     price_per_km: Decimal | None = None
@@ -195,18 +254,32 @@ def calculate_expected_price(
         pricing_method = "base_plus_km"
         base_price = to_decimal(base_plus_km_rule.parameters.get("base_price", "0"))
         minimum_km = to_decimal(base_plus_km_rule.parameters.get("minimum_km", "0"))
-        price_per_km = _resolve_price_per_km(base_plus_km_rule, countries_involved)
+        price_per_km = _resolve_price_per_km(base_plus_km_rule, countries_involved, tour_number_prefix)
 
         billable_km = max(reference_km, minimum_km)
         km_amount = billable_km * price_per_km
         base_amount = base_price
 
     additional_unloading_point_price = default_additional_unloading_point_price
-    if base_plus_km_rule is not None and "additional_unloading_point_price" in base_plus_km_rule.parameters:
-        additional_unloading_point_price = to_decimal(base_plus_km_rule.parameters["additional_unloading_point_price"])
+    toll_exempt = False
+    if base_plus_km_rule is not None:
+        if "additional_unloading_point_price" in base_plus_km_rule.parameters:
+            additional_unloading_point_price = to_decimal(base_plus_km_rule.parameters["additional_unloading_point_price"])
+        toll_exempt = bool(base_plus_km_rule.parameters.get("toll_exempt", False))
     additional_stops_amount = additional_unloading_point_price * additional_stops
 
-    total = base_amount + km_amount + additional_stops_amount + allowed_surcharge_total
+    toll_amount = Decimal("0") if toll_exempt else (toll_km * toll_rate_per_km)
+
+    total = (
+        base_amount
+        + km_amount
+        + additional_stops_amount
+        + toll_amount
+        + special_agreement_surcharge
+        + allowed_surcharge_total
+    )
+
+    total_amount = round_up_to_whole_currency_unit(total) if round_total_up_to_whole_unit else round_money(total)
 
     return ExpectedPriceBreakdown(
         tariff_id=tariff.id,
@@ -216,7 +289,9 @@ def calculate_expected_price(
         price_per_km=price_per_km,
         additional_stops_amount=round_money(additional_stops_amount),
         surcharge_amount=round_money(allowed_surcharge_total),
-        total_amount=round_money(total),
+        toll_amount=round_money(toll_amount),
+        special_agreement_amount=round_money(special_agreement_surcharge),
+        total_amount=total_amount,
         pricing_method=pricing_method,
     )
 

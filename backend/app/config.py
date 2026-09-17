@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     # dieser globale Standardwert fuer alle Touren.
     default_tour_origin_country_code: str = "PL"
 
+    # --- Maut (BEGA-Finetuning, reale Preisformel aus
+    # "Preise_2026_fuer_Wolke.xlsm"): Kosten je mautpflichtigem km in
+    # Deutschland (Tour.toll_km), je Tarif ueberschreibbar via
+    # TariffRule-Parameter "toll_exempt" (siehe app/tariff_engine/engine.py).
+    default_toll_rate_per_km_eur: float = 0.158
+
     # --- Aufbewahrung (Punkt 10 offene Entscheidungen) ---
     retention_days_documents: int | None = None
     retention_days_audit_results: int | None = None

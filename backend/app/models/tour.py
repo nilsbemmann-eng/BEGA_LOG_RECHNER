@@ -32,6 +32,11 @@ class Tour(Base, TimestampMixin):
     source_document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
 
     invoiced_km: Mapped[Money | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Mautpflichtige Teilstrecke in Deutschland ("MautstreckeGermany", reale
+    # BEGA-Preisformel aus "Preise_2026_fuer_Wolke.xlsm") - separat von
+    # invoiced_km, da nur dieser Anteil mit dem Maut-Satz bepreist wird
+    # (siehe app/tariff_engine/engine.py, docs/OFFENE_ENTSCHEIDUNGEN.md).
+    toll_km: Mapped[Money | None] = mapped_column(Numeric(10, 2), nullable=True)
     invoice_amount: Mapped[Money | None] = mapped_column(Numeric(12, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
 

@@ -191,3 +191,104 @@ def test_tariff_specific_additional_unloading_point_price_overrides_default() ->
         tariff, reference_km=Decimal("100"), unloading_point_count=2, default_additional_unloading_point_price=Decimal("50")
     )
     assert breakdown.additional_stops_amount == Decimal("75.00")
+
+
+# --- Reale BEGA-Tour-Preisformel (Finetuning: "Preise_2026_fuer_Wolke.xlsm") -----
+
+
+def test_toll_cost_is_added_from_toll_km() -> None:
+    tariff = TariffDTO(
+        id="t1", valid_from=date(2026, 1, 1), valid_to=None, status="released",
+        rules=[TariffRuleDTO(rule_type="base_plus_km", parameters={"base_price": "0", "price_per_km": "1.00"})],
+    )
+    breakdown = calculate_expected_price(
+        tariff, reference_km=Decimal("50"), toll_km=Decimal("100"), toll_rate_per_km=Decimal("0.158")
+    )
+    assert breakdown.toll_amount == Decimal("15.80")
+    assert breakdown.total_amount == Decimal("65.80")
+
+
+def test_toll_exempt_carrier_ignores_toll_km() -> None:
+    tariff = TariffDTO(
+        id="t1", valid_from=date(2026, 1, 1), valid_to=None, status="released",
+        rules=[TariffRuleDTO(rule_type="base_plus_km", parameters={"base_price": "0", "price_per_km": "1.00", "toll_exempt": True})],
+    )
+    breakdown = calculate_expected_price(
+        tariff, reference_km=Decimal("50"), toll_km=Decimal("100"), toll_rate_per_km=Decimal("0.158")
+    )
+    assert breakdown.toll_amount == Decimal("0")
+    assert breakdown.total_amount == Decimal("50.00")
+
+
+def test_special_agreement_surcharge_is_added_flat() -> None:
+    tariff = TariffDTO(
+        id="t1", valid_from=date(2026, 1, 1), valid_to=None, status="released",
+        rules=[TariffRuleDTO(rule_type="base_plus_km", parameters={"base_price": "0", "price_per_km": "1.00"})],
+    )
+    breakdown = calculate_expected_price(
+        tariff, reference_km=Decimal("50"), special_agreement_surcharge=Decimal("100.00")
+    )
+    assert breakdown.special_agreement_amount == Decimal("100.00")
+    assert breakdown.total_amount == Decimal("150.00")
+
+
+def test_prefix_country_rate_override_takes_precedence_over_price_per_km_by_country() -> None:
+    tariff = TariffDTO(
+        id="t1", valid_from=date(2026, 1, 1), valid_to=None, status="released",
+        rules=[TariffRuleDTO(rule_type="base_plus_km", parameters={
+            "base_price": "0",
+            "price_per_km_by_country": {"DE": "1.00"},
+            "prefix_country_rate_overrides": [
+                {"tour_number_prefix": "78", "destination_countries": ["DE"], "price_per_km": "1.35"},
+            ],
+        })],
+    )
+    breakdown = calculate_expected_price(
+        tariff, reference_km=Decimal("50"), destination_country="DE", tour_number_prefix="78"
+    )
+    assert breakdown.price_per_km == Decimal("1.35")
+    assert breakdown.total_amount == Decimal("67.50")
+
+
+def test_prefix_country_rate_override_does_not_apply_to_other_prefixes() -> None:
+    tariff = TariffDTO(
+        id="t1", valid_from=date(2026, 1, 1), valid_to=None, status="released",
+        rules=[TariffRuleDTO(rule_type="base_plus_km", parameters={
+            "base_price": "0",
+            "price_per_km_by_country": {"DE": "1.00"},
+            "prefix_country_rate_overrides": [
+                {"tour_number_prefix": "78", "destination_countries": ["DE"], "price_per_km": "1.35"},
+            ],
+        })],
+    )
+    breakdown = calculate_expected_price(
+        tariff, reference_km=Decimal("50"), destination_country="DE", tour_number_prefix="29"
+    )
+    assert breakdown.price_per_km == Decimal("1.00")
+
+
+def test_use_fixed_freight_false_ignores_all_in_rule() -> None:
+    tariff = TariffDTO(
+        id="t1", valid_from=date(2026, 1, 1), valid_to=None, status="released",
+        rules=[
+            TariffRuleDTO(rule_type="all_in", parameters={"prices": [{"origin_country": "PL", "destination_country": "DE", "amount": "350.00"}]}),
+            TariffRuleDTO(rule_type="base_plus_km", parameters={"base_price": "0", "price_per_km": "1.00"}),
+        ],
+    )
+    breakdown = calculate_expected_price(
+        tariff, reference_km=Decimal("50"), origin_country="PL", destination_country="DE",
+        unloading_point_count=1, use_fixed_freight=False,
+    )
+    assert breakdown.pricing_method == "base_plus_km"
+    assert breakdown.total_amount == Decimal("50.00")
+
+
+def test_round_total_up_to_whole_unit_rounds_up_not_to_nearest() -> None:
+    tariff = TariffDTO(
+        id="t1", valid_from=date(2026, 1, 1), valid_to=None, status="released",
+        rules=[TariffRuleDTO(rule_type="base_plus_km", parameters={"base_price": "0", "price_per_km": "1.00"})],
+    )
+    breakdown = calculate_expected_price(
+        tariff, reference_km=Decimal("50.01"), round_total_up_to_whole_unit=True
+    )
+    assert breakdown.total_amount == Decimal("51")  # nicht 50 (kaufmaennisch) - Excel-ROUNDUP rundet immer AUF

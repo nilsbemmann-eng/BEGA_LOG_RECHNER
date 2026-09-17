@@ -76,8 +76,8 @@ def test_run_tour_audit_endpoint_and_tour_endpoints(client, db_session):
             "currency": "EUR",
             "rules": [
                 {
-                    "rule_type": "all_in",
-                    "parameters": {"prices": [{"origin_country": "PL", "destination_country": "DE", "amount": "350.00"}]},
+                    "rule_type": "base_plus_km",
+                    "parameters": {"base_price": "0", "price_per_km": "1.00", "minimum_km": "0"},
                     "priority": 0,
                 }
             ],
@@ -93,7 +93,7 @@ def test_run_tour_audit_endpoint_and_tour_endpoints(client, db_session):
 
     tour = Tour(
         tour_number="1918622", carrier_id=carrier.id, tour_date=date(2026, 9, 15),
-        invoiced_km=Decimal("50"), invoice_amount=Decimal("350.00"),
+        invoiced_km=Decimal("50"), invoice_amount=Decimal("50.00"),
     )
     db_session.add(tour)
     db_session.flush()
@@ -128,7 +128,7 @@ def test_run_tour_audit_endpoint_and_tour_endpoints(client, db_session):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["status"] == "BESTANDEN"
-    assert payload["expected_amount"] == "350.00"
+    assert payload["expected_amount"] == "50.00"
     assert payload["shipment_id"] is None
     assert payload["tour_id"] == tour.id
     assert payload["shipment_number"] == "1918622"  # faellt auf die Tour-Nummer zurueck

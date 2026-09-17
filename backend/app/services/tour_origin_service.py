@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from decimal import Decimal
+
 from app.models.address import Address
+from app.models.special_agreement_surcharge import SpecialAgreementSurcharge
 from app.models.tour_origin_mapping import TourOriginMapping
 
 PREFIX_LENGTH = 2
@@ -53,3 +56,14 @@ def resolve_tour_origin_address(db: Session, tour_number: str) -> OriginResoluti
         address=None,
         ambiguous_matchcodes=sorted({m.matchcode for m in candidates}),
     )
+
+
+def resolve_special_agreement_surcharge(db: Session, tour_number: str) -> Decimal:
+    """"Sondervereinbarungen"-Zuschlag (reale BEGA-Preisformel, siehe
+    `app/models/special_agreement_surcharge.py`) - 0, wenn fuer den Praefix
+    kein Zuschlag hinterlegt ist."""
+    prefix = tour_number[:PREFIX_LENGTH]
+    surcharge = db.execute(
+        select(SpecialAgreementSurcharge).where(SpecialAgreementSurcharge.tour_number_prefix == prefix)
+    ).scalars().first()
+    return surcharge.amount if surcharge else Decimal("0")

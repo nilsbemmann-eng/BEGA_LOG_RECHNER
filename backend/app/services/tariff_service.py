@@ -47,6 +47,12 @@ def calculate_expected_price_for_tariff(
     destination_country: str | None = None,
     unloading_point_count: int = 1,
     default_additional_unloading_point_price: Decimal = Decimal("50"),
+    tour_number_prefix: str | None = None,
+    toll_km: Decimal = Decimal("0"),
+    toll_rate_per_km: Decimal = Decimal("0.158"),
+    special_agreement_surcharge: Decimal = Decimal("0"),
+    use_fixed_freight: bool = True,
+    round_total_up_to_whole_unit: bool = False,
 ) -> ExpectedPriceBreakdown:
     return calculate_expected_price(
         _to_dto(tariff),
@@ -56,4 +62,10 @@ def calculate_expected_price_for_tariff(
         destination_country=destination_country,
         unloading_point_count=unloading_point_count,
         default_additional_unloading_point_price=default_additional_unloading_point_price,
+        tour_number_prefix=tour_number_prefix,
+        toll_km=toll_km,
+        toll_rate_per_km=toll_rate_per_km,
+        special_agreement_surcharge=special_agreement_surcharge,
+        use_fixed_freight=use_fixed_freight,
+        round_total_up_to_whole_unit=round_total_up_to_whole_unit,
     )

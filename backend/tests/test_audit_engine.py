@@ -80,3 +80,32 @@ def test_build_explanation_lists_only_problematic_rules() -> None:
     explanation = build_explanation(outcomes)
     assert "Duplikat" in explanation
     assert "Zuordnung" not in explanation
+
+
+# --- price_tolerance_mode="invoice_must_not_exceed_expected" (reale BEGA-Tour-Preisformel) ---
+
+
+def test_one_sided_price_mode_passes_when_invoice_far_below_expected() -> None:
+    outcomes = run_audit_rules(_complete_input(
+        price_difference_percent=Decimal("-90"), price_tolerance_mode="invoice_must_not_exceed_expected",
+    ))
+    price_result = next(o for o in outcomes if o.rule_code == "price_limit")
+    assert price_result.status == RuleStatus.PASSED
+    assert derive_overall_status(outcomes) == AuditStatus.BESTANDEN
+
+
+def test_one_sided_price_mode_fails_on_any_positive_difference() -> None:
+    outcomes = run_audit_rules(_complete_input(
+        price_difference_percent=Decimal("0.01"), price_tolerance_mode="invoice_must_not_exceed_expected",
+    ))
+    price_result = next(o for o in outcomes if o.rule_code == "price_limit")
+    assert price_result.status == RuleStatus.FAILED
+    assert derive_overall_status(outcomes) == AuditStatus.ABWEICHUNG
+
+
+def test_one_sided_price_mode_passes_at_exactly_zero_difference() -> None:
+    outcomes = run_audit_rules(_complete_input(
+        price_difference_percent=Decimal("0"), price_tolerance_mode="invoice_must_not_exceed_expected",
+    ))
+    price_result = next(o for o in outcomes if o.rule_code == "price_limit")
+    assert price_result.status == RuleStatus.PASSED

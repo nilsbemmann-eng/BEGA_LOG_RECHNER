@@ -12,6 +12,7 @@ from app.api.routers import (
     imports,
     routes,
     shipments,
+    special_agreement_surcharges,
     tariffs,
     tour_origin_mappings,
     tours,
@@ -48,6 +49,7 @@ app.include_router(imports.router)
 app.include_router(exports.router)
 app.include_router(tours.router)
 app.include_router(tour_origin_mappings.router)
+app.include_router(special_agreement_surcharges.router)
 
 
 @app.get("/health", tags=["system"])
