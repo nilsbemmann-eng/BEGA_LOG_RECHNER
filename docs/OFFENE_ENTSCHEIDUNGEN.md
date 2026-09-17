@@ -114,3 +114,47 @@ Auf Rückfrage wurden folgende Praxisregeln bestätigt und wie folgt umgesetzt
 **Grundsatz:** Kein Fall wird aufgrund eines fehlenden Nachweises oder eines
 niedrigen OCR-Konfidenzwerts automatisch endgültig abgelehnt. Das Ergebnis ist
 in diesen Fällen immer `MANUELLE_PRÜFUNG` (siehe `app/audit_engine/`).
+
+## Tour-Preisprüfung / Ladelisten-PDF-Import (Finetuning-Gespräch, reale Stylinart-PDFs)
+
+- **Eine Rechnung pro Tour**: Nutzerbestätigung - eine Frachtrechnung bezieht
+  sich auf die gesamte Tour/Ladeliste (potenziell viele Aufträge/Entladestellen),
+  nicht auf eine Einzelsendung. Neues `Tour`-Modell (`app/models/tour.py`)
+  bündelt mehrere `Shipment`-Zeilen; `AuditResult.shipment_id` ist jetzt
+  nullable, `AuditResult.tour_id` alternativ gesetzt (siehe
+  `app/services/audit_service.py::run_tour_audit`).
+- **Entladestellen-Deduplizierung**: mehrere Auftrags-Nr. können dieselbe
+  physische Entladestelle teilen, und dieselbe Adresse kann mit
+  unterschiedlichen Name1/Name2-Zeilen erscheinen (z. B. "Mitnahmelager
+  Pulheim" vs. "Hans Segmüller GmbH & Co. KG" für dieselbe Adresse in
+  D-50259 Pulheim) - Nutzerbestätigung: das ist reine Namens-Granularität der
+  Kundenadresse, keine getrennten Stopps. Die Zählung "Anzahl Entladestellen"
+  je Tour erfolgt daher über eindeutige (PLZ, Ort)-Paare, nicht über
+  Adresstext oder Auftrags-Nr.
+- **Zahlenformat im Ladelisten-PDF weicht vom sonstigen "deutschen Format" ab**:
+  In der Spalte "kg / cbm" ist die kg-Zeile immer eine Ganzzahl (Punkt als
+  Tausendertrennzeichen, z. B. "3.504" = 3504 kg), die cbm-Zeile dagegen immer
+  ein Dezimalwert mit Punkt als Dezimaltrennzeichen und fixen 3 Nachkommastellen
+  (z. B. "0.499" = 0,499 m³) - **nicht** die sonst im Projekt verwendete
+  deutsche Konvention (Komma=Dezimal, Punkt=Tausender, siehe
+  `app/normalization/numbers.py`). Ein einzelner realer Beleg enthielt zudem
+  einen Ausreißer mit Komma statt Punkt ("3,893" statt vermutlich "3.893");
+  der Parser (`app/services/ladeliste_pdf_parser.py`) behandelt Komma und
+  Punkt in der kg-Zeile daher gleichwertig als Tausendertrennzeichen. Das ist
+  eine reale, unsaubere Quelldatenabweichung, kein Parserfehler - Summen
+  können dadurch in Einzelfällen um 1 kg von der gedruckten SUMME abweichen.
+- **Ursprungsland für Fixfracht-Zuordnung**: Ladelisten enthalten keine
+  Beladeadresse. Nutzerangabe: der Frachtführer lädt "in der Regel" in Polen;
+  eine feinere Zuordnung über die ersten 2 Ziffern der Ladelistennummer wurde
+  angekündigt, die konkrete Zuordnungstabelle liegt aber noch nicht vor.
+  Bis dahin gilt der globale Standardwert `Settings.default_tour_origin_country_code`
+  (`"PL"`) für **alle** Touren. **Offen**: Zuordnungstabelle
+  Ladelistennummer-Prefix -> Ursprungsland/-ort nachreichen, sobald verfügbar.
+- **Kein Multi-Stop-Routing für Touren (MVP)**: `run_tour_audit()` verifiziert
+  die Fixfracht/km-Satz-Anwendung und den Entladestellen-Zuschlag, aber
+  **nicht** die gefahrene Strecke selbst - dafür fehlt eine Geokodierung/Route
+  über alle Entladestellen einer Tour (die bestehende Distanz-Engine ist auf
+  eine einzelne Start-Ziel-Relation ausgelegt). Referenz-km = die vom
+  Frachtführer selbst angegebenen Tour-km (`Tour.invoiced_km`), d. h. eine
+  Kilometer-Abweichungsprüfung findet auf Tour-Ebene aktuell nicht statt.
+  **Offen**: Mehrstopp-Routing als eigenes Feature, falls benötigt.

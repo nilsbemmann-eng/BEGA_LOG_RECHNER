@@ -80,6 +80,15 @@ class Settings(BaseSettings):
     # ueber TariffRule-Parameter "additional_unloading_point_price" ueberschreibbar.
     default_additional_unloading_point_price_eur: float = 50.0
 
+    # --- Tour-Preispruefung (BEGA-Finetuning, Ladelisten-Import) ---
+    # Ladelisten enthalten keine Beladeadresse/kein Ursprungsland (nur
+    # Entladestellen). Nutzerangabe: der Frachtfuehrer laedt "in der Regel"
+    # in Polen; eine feinere Zuordnung ueber die ersten 2 Ziffern der
+    # Ladelistennummer ist angekuendigt, aber die Zuordnungstabelle liegt
+    # noch nicht vor (siehe docs/OFFENE_ENTSCHEIDUNGEN.md). Bis dahin gilt
+    # dieser globale Standardwert fuer alle Touren.
+    default_tour_origin_country_code: str = "PL"
+
     # --- Aufbewahrung (Punkt 10 offene Entscheidungen) ---
     retention_days_documents: int | None = None
     retention_days_audit_results: int | None = None
