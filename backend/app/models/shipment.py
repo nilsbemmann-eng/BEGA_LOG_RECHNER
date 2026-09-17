@@ -22,6 +22,10 @@ class Shipment(Base, TimestampMixin):
     carrier_id: Mapped[str | None] = mapped_column(ForeignKey("carriers.id"), nullable=True)
     origin_address_id: Mapped[str | None] = mapped_column(ForeignKey("addresses.id"), nullable=True)
     destination_address_id: Mapped[str | None] = mapped_column(ForeignKey("addresses.id"), nullable=True)
+    # Gruppiert mehrere Auftraege einer Ladeliste zu einer Tour, wenn die
+    # Frachtrechnung sich auf die gesamte Tour bezieht statt auf die
+    # Einzelsendung (siehe app/models/tour.py).
+    tour_id: Mapped[str | None] = mapped_column(ForeignKey("tours.id"), nullable=True)
 
     weight_kg: Mapped[Money | None] = mapped_column(Numeric(12, 3), nullable=True)
     pallets: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -42,6 +46,7 @@ class Shipment(Base, TimestampMixin):
     carrier: Mapped["Carrier | None"] = relationship()  # noqa: F821
     origin_address: Mapped["Address | None"] = relationship(foreign_keys=[origin_address_id])  # noqa: F821
     destination_address: Mapped["Address | None"] = relationship(foreign_keys=[destination_address_id])  # noqa: F821
+    tour: Mapped["Tour | None"] = relationship(back_populates="shipments")  # noqa: F821
 
     documents: Mapped[list["Document"]] = relationship(back_populates="shipment")  # noqa: F821
     routing_results: Mapped[list["RoutingResult"]] = relationship(  # noqa: F821

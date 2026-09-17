@@ -14,6 +14,7 @@ from app.models.routing import RoutingResult
 from app.models.shipment import Shipment
 from app.models.surcharge import SurchargeClaim, SurchargeStatus, SurchargeType
 from app.models.tariff import Tariff, TariffRule, TariffRuleType, TariffStatus
+from app.models.tour import Tour
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -47,6 +48,7 @@ __all__ = [
     "TariffRule",
     "TariffRuleType",
     "TariffStatus",
+    "Tour",
     "User",
     "UserRole",
 ]

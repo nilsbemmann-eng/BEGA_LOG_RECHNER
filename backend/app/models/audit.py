@@ -30,7 +30,13 @@ class RuleStatus(str, enum.Enum):
 
 
 class AuditResult(Base, TimestampMixin):
-    """Ergebnis einer Preispruefung fuer eine Sendung (Abschnitt 8/9).
+    """Ergebnis einer Preispruefung fuer eine Sendung ODER eine ganze Tour
+    (Abschnitt 8/9; Tour-Pruefung ist BEGA-Finetuning, siehe app/models/tour.py).
+
+    Genau eines von `shipment_id`/`tour_id` ist gesetzt - durchgesetzt in
+    `app/services/audit_service.py`, nicht per DB-Constraint, da SQLite (Tests)
+    keine CHECK-Constraints ueber mehrere Spalten mit der hier verwendeten
+    Deklarationsform zuverlaessig unterstuetzt.
 
     Speichert immer die konkret verwendete Tarifversion (`tariff_id`), damit
     spaetere Tarifaenderungen bestehende Ergebnisse nicht veraendern
@@ -40,7 +46,8 @@ class AuditResult(Base, TimestampMixin):
     __tablename__ = "audit_results"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
-    shipment_id: Mapped[str] = mapped_column(ForeignKey("shipments.id"), nullable=False)
+    shipment_id: Mapped[str | None] = mapped_column(ForeignKey("shipments.id"), nullable=True)
+    tour_id: Mapped[str | None] = mapped_column(ForeignKey("tours.id"), nullable=True)
     tariff_id: Mapped[str | None] = mapped_column(ForeignKey("tariffs.id"), nullable=True)
 
     reference_distance_km: Mapped[Money | None] = mapped_column(Numeric(10, 2), nullable=True)
@@ -56,26 +63,40 @@ class AuditResult(Base, TimestampMixin):
     approved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    shipment: Mapped["Shipment"] = relationship(back_populates="audit_results")  # noqa: F821
+    shipment: Mapped["Shipment | None"] = relationship(back_populates="audit_results")  # noqa: F821
+    tour: Mapped["Tour | None"] = relationship(back_populates="audit_results")  # noqa: F821
     tariff: Mapped["Tariff | None"] = relationship()  # noqa: F821
     rule_results: Mapped[list["AuditRuleResult"]] = relationship(
         back_populates="audit_result", cascade="all, delete-orphan"
     )
 
-    # Nur lesende Komfort-Properties fuer die Historie (Abschnitt 12, Suche/Export) -
-    # keine eigenen Spalten, damit Tarifaenderungen weiterhin keine bestehenden
-    # Pruefergebnisse veraendern (Abschnitt 6.2).
+    # Nur lesende Komfort-Properties fuer die Historie (Abschnitt 12, Suche/Export).
+    # Fallen bei Tour-Pruefungen auf die Tour zurueck, da dort kein `shipment`
+    # gesetzt ist - keine eigenen Spalten, damit Tarifaenderungen weiterhin
+    # keine bestehenden Pruefergebnisse veraendern (Abschnitt 6.2).
     @property
     def shipment_number(self) -> str | None:
-        return self.shipment.shipment_number if self.shipment else None
+        if self.shipment:
+            return self.shipment.shipment_number
+        if self.tour:
+            return self.tour.tour_number
+        return None
 
     @property
     def carrier_name(self) -> str | None:
-        return self.shipment.carrier.name if self.shipment and self.shipment.carrier else None
+        if self.shipment and self.shipment.carrier:
+            return self.shipment.carrier.name
+        if self.tour and self.tour.carrier:
+            return self.tour.carrier.name
+        return None
 
     @property
     def transport_date(self):  # noqa: ANN201 - Rueckgabetyp date | None, siehe Shipment.transport_date
-        return self.shipment.transport_date if self.shipment else None
+        if self.shipment:
+            return self.shipment.transport_date
+        if self.tour:
+            return self.tour.tour_date
+        return None
 
 
 class AuditRuleResult(Base, TimestampMixin):
