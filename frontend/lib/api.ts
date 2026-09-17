@@ -1,6 +1,63 @@
-import type { AuditHistoryFilters, AuditResultOut, EmailOut, EmailUploadResult, ExportOut, ShipmentOut } from "./types";
+import type {
+  AuditHistoryFilters,
+  AuditResultOut,
+  ChangePasswordRequest,
+  EmailOut,
+  EmailUploadResult,
+  ExportOut,
+  LoginRequest,
+  SetPasswordRequest,
+  ShipmentOut,
+  TokenOut,
+  UserCreateRequest,
+  UserOut,
+  UserUpdateRequest,
+} from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+const AUTH_TOKEN_STORAGE_KEY = "bega_auth_token";
+
+/** Token wird nur im Browser (localStorage) gehalten - Server Components
+ * fuehren ihre eigenen Requests aus und nutzen den Dev-Fallback in
+ * app/auth.py (siehe resolveBaseUrl). */
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (token) {
+      window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // localStorage nicht verfuegbar (z.B. Privatmodus) - Login funktioniert
+    // dann nur fuer die laufende Seitenansicht.
+  }
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // Server Components (SSR) rufen das Backend direkt unter API_BASE_URL auf.
 // Im Browser laufender Code nutzt stattdessen denselben Origin (leerer Base-
@@ -12,12 +69,16 @@ function resolveBaseUrl(): string {
 }
 
 /** Liest die einheitliche Fehlerantwort aus Abschnitt 14 (`ErrorResponse`
- * in backend/app/schemas.py) aus, falls vorhanden, sonst einen generischen Text. */
+ * in backend/app/schemas.py) aus, falls vorhanden, sonst FastAPIs Standard-
+ * `{"detail": ...}` (z.B. bei Login-Fehlern), sonst einen generischen Text. */
 async function extractErrorMessage(response: Response, path: string): Promise<string> {
   try {
     const body = await response.json();
     if (body && typeof body.message === "string") {
       return body.message;
+    }
+    if (body && typeof body.detail === "string") {
+      return body.detail;
     }
   } catch {
     // Antwort war kein JSON - generische Meldung verwenden.
@@ -25,14 +86,20 @@ async function extractErrorMessage(response: Response, path: string): Promise<st
   return `API-Fehler ${response.status} bei ${path}`;
 }
 
+async function throwApiError(response: Response, path: string): Promise<never> {
+  throw new ApiError(await extractErrorMessage(response, path), response.status);
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${resolveBaseUrl()}${path}`, {
-    // MVP-Backend hat noch keine Session-Auth (siehe app/auth.py) - der Server
-    // faellt in der Entwicklung auf einen Default-Admin zurueck.
+    // Server Components faellt in der Entwicklung auf einen Default-Admin
+    // zurueck (siehe app/auth.py); im Browser wird ein evtl. vorhandenes
+    // JWT mitgeschickt (siehe authHeaders).
     cache: "no-store",
+    headers: { ...authHeaders() },
   });
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, path));
+    await throwApiError(response, path);
   }
   return response.json() as Promise<T>;
 }
@@ -40,11 +107,34 @@ async function apiGet<T>(path: string): Promise<T> {
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${resolveBaseUrl()}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, path));
+    await throwApiError(response, path);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function apiPostNoContent(path: string, body: unknown): Promise<void> {
+  const response = await fetch(`${resolveBaseUrl()}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    await throwApiError(response, path);
+  }
+}
+
+async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${resolveBaseUrl()}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    await throwApiError(response, path);
   }
   return response.json() as Promise<T>;
 }
@@ -52,9 +142,9 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
 async function apiUpload<T>(path: string, file: File): Promise<T> {
   const formData = new FormData();
   formData.append("file", file);
-  const response = await fetch(`${resolveBaseUrl()}${path}`, { method: "POST", body: formData });
+  const response = await fetch(`${resolveBaseUrl()}${path}`, { method: "POST", body: formData, headers: { ...authHeaders() } });
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, path));
+    await throwApiError(response, path);
   }
   return response.json() as Promise<T>;
 }
@@ -100,6 +190,34 @@ export function exportDownloadUrl(downloadUrl: string): string {
  * genauso verarbeitet wie eine per IMAP abgeholte E-Mail. */
 export function uploadEmailFile(file: File): Promise<EmailUploadResult> {
   return apiUpload<EmailUploadResult>("/api/emails/upload", file);
+}
+
+export function login(credentials: LoginRequest): Promise<TokenOut> {
+  return apiPost<TokenOut>("/api/auth/login", credentials);
+}
+
+export function fetchCurrentUser(): Promise<UserOut> {
+  return apiGet<UserOut>("/api/auth/me");
+}
+
+export function changeOwnPassword(payload: ChangePasswordRequest): Promise<void> {
+  return apiPostNoContent("/api/auth/change-password", payload);
+}
+
+export function fetchUsers(): Promise<UserOut[]> {
+  return apiGet<UserOut[]>("/api/users");
+}
+
+export function createUser(payload: UserCreateRequest): Promise<UserOut> {
+  return apiPost<UserOut>("/api/users", payload);
+}
+
+export function updateUser(id: string, payload: UserUpdateRequest): Promise<UserOut> {
+  return apiPatch<UserOut>(`/api/users/${id}`, payload);
+}
+
+export function setUserPassword(id: string, payload: SetPasswordRequest): Promise<void> {
+  return apiPostNoContent(`/api/users/${id}/set-password`, payload);
 }
 
 export { API_BASE_URL };

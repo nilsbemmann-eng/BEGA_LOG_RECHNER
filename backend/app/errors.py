@@ -136,6 +136,15 @@ class TourOriginMatrixImportFailedError(AppError):
     retryable = False
 
 
+class EmailAlreadyExistsError(AppError):
+    """E-Mail-Adresse ist bereits einem anderen Benutzer zugeordnet
+    (`User.email` ist eindeutig)."""
+
+    error_code = "email_already_exists"
+    status_code = 409
+    retryable = False
+
+
 class CredentialEncryptionNotConfiguredApiError(AppError):
     """CREDENTIAL_ENCRYPTION_KEY ist nicht gesetzt - admin-pflegbare
     Zugangsdaten koennen daher nicht sicher gespeichert werden."""

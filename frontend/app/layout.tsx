@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
+import { AuthProvider } from "../lib/auth-context";
+import { TopNav } from "../components/TopNav";
 
 export const metadata: Metadata = {
   title: "BEGA Frachtpreisrechner",
@@ -11,16 +12,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="de">
       <body>
-        <nav className="top-nav">
-          <div className="top-nav-inner">
-            <span className="top-nav-brand">BEGA Frachtpreisrechner</span>
-            <div className="top-nav-links">
-              <Link href="/">Dashboard</Link>
-              <Link href="/historie">Historie</Link>
-            </div>
-          </div>
-        </nav>
-        <main className="page">{children}</main>
+        <AuthProvider>
+          <TopNav />
+          <main className="page">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -83,3 +83,49 @@ export interface EmailUploadResult {
   subject: string;
   attachment_count: number;
 }
+
+// --- Login / Benutzerverwaltung (Abschnitt 3) --------------------------------
+
+export type UserRole = "admin" | "pruefer" | "viewer";
+
+export interface UserOut {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface TokenOut {
+  access_token: string;
+  token_type: string;
+  expires_in_minutes: number;
+  user: UserOut;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface UserCreateRequest {
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+}
+
+export interface UserUpdateRequest {
+  name?: string;
+  role?: UserRole;
+  active?: boolean;
+}
+
+export interface SetPasswordRequest {
+  new_password: string;
+}

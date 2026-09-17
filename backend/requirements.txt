@@ -14,6 +14,10 @@ Pillow==12.3.0
 python-multipart==0.0.9
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# bcrypt>=4.1 entfernt Attribute, auf die passlib 1.7.4 zur Backend-Erkennung
+# zugreift (bricht Passwort-Hashing zur Laufzeit) - explizit unter dieser
+# Grenze anheften, bis passlib aktualisiert wird.
+bcrypt==4.0.1
 cryptography==50.0.1
 
 pytest==8.3.3

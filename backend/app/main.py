@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
     audits,
+    auth,
     documents,
     emails,
     exports,
@@ -17,6 +18,7 @@ from app.api.routers import (
     tariffs,
     tour_origin_mappings,
     tours,
+    users,
 )
 from app.config import get_settings
 from app.errors import register_exception_handlers
@@ -39,6 +41,8 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
+app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(emails.router)
 app.include_router(documents.router)
 app.include_router(extracted_fields.router)

@@ -15,6 +15,51 @@ class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# --- Login/Benutzerverwaltung (Abschnitt 3, 10.3) ---------------------------
+
+
+class UserOut(ORMModel):
+    id: str
+    name: str
+    email: str
+    role: str
+    active: bool
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_minutes: int
+    user: UserOut
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class UserCreateRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    role: str = "viewer"
+
+
+class UserUpdateRequest(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    active: bool | None = None
+
+
+class SetPasswordRequest(BaseModel):
+    new_password: str
+
+
 # --- E-Mails -----------------------------------------------------------------
 
 
