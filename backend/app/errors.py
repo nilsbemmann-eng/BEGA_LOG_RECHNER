@@ -127,6 +127,15 @@ class NotFoundError(AppError):
     retryable = False
 
 
+class TourOriginMatrixImportFailedError(AppError):
+    """Die hochgeladene "Gebietsrelationen"-Excel-Datei entspricht nicht der
+    erwarteten Spaltenstruktur (siehe app/services/tour_origin_import_service.py)."""
+
+    error_code = "tour_origin_matrix_import_failed"
+    status_code = 422
+    retryable = False
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:  # noqa: ARG001

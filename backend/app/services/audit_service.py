@@ -244,7 +244,8 @@ def run_tour_audit(
         s.destination_address.country_code for s in stops if s.destination_address.country_code
     }
 
-    origin_address = resolve_tour_origin_address(db, tour.tour_number)
+    origin_resolution = resolve_tour_origin_address(db, tour.tour_number)
+    origin_address = origin_resolution.address
     origin_geocoded = False
     if origin_address is not None:
         try:
@@ -364,6 +365,12 @@ def run_tour_audit(
     rule_outcomes: list[RuleOutcome] = run_audit_rules(rule_input)
     overall_status = derive_overall_status(rule_outcomes)
     explanation = build_explanation(rule_outcomes)
+    if origin_resolution.ambiguous_matchcodes:
+        explanation += (
+            f" [Absender-Matrix] Praefix '{tour.tour_number[:2]}' ist mehrdeutig hinterlegt "
+            f"(Matchcodes mit unterschiedlichen Adressen: {', '.join(origin_resolution.ambiguous_matchcodes)}) - "
+            "Startadresse konnte nicht eindeutig bestimmt werden."
+        )
 
     audit_result = AuditResult(
         tour_id=tour.id,

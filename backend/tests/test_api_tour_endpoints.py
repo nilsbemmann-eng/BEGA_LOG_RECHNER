@@ -1,5 +1,8 @@
+import io
 from datetime import date, datetime, timezone
 from decimal import Decimal
+
+from openpyxl import Workbook
 
 from app.api.deps import get_geocoding_provider, get_routing_provider
 from app.main import app
@@ -42,11 +45,12 @@ def test_create_and_list_tour_origin_mapping(client, db_session):
 
     response = client.post(
         "/api/tour-origin-mappings",
-        json={"tour_number_prefix": "19", "label": "Test-Depot", "city": "Stettin", "country_code": "PL"},
+        json={"tour_number_prefix": "19", "matchcode": "MP", "description": "Meble Polskie", "city": "Stettin", "country_code": "PL"},
     )
     assert response.status_code == 201, response.text
     payload = response.json()
     assert payload["tour_number_prefix"] == "19"
+    assert payload["matchcode"] == "MP"
     assert payload["city"] == "Stettin"
 
     list_response = client.get("/api/tour-origin-mappings")
@@ -83,7 +87,7 @@ def test_run_tour_audit_endpoint_and_tour_endpoints(client, db_session):
 
     mapping_response = client.post(
         "/api/tour-origin-mappings",
-        json={"tour_number_prefix": "19", "city": "Stettin", "country_code": "PL"},
+        json={"tour_number_prefix": "19", "matchcode": "MP", "city": "Stettin", "country_code": "PL"},
     )
     assert mapping_response.status_code == 201, mapping_response.text
 
@@ -150,3 +154,26 @@ def test_historie_includes_tour_audit_results(client, db_session):
     assert results[0]["tour_id"] == tour.id
     assert results[0]["shipment_id"] is None
     assert results[0]["shipment_number"] == "1918622"
+
+
+def test_import_tour_origin_matrix_endpoint(client, db_session):
+    _seed_admin(db_session)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Matchcode", "Bezeichnung", "Präfix", "Absender", "Absenderadresse"])
+    sheet.append(["MP", "Meble Polskie", 19, "Meble Polskie Janusz Fijalek", "PL 22-400 Zamosc ul. Strefowa 10"])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+
+    response = client.post(
+        "/api/tour-origin-mappings/import",
+        files={"file": ("Gebietsrelationen.xlsx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["imported_count"] == 1
+
+    list_response = client.get("/api/tour-origin-mappings")
+    assert len(list_response.json()) == 1
+    assert list_response.json()[0]["matchcode"] == "MP"

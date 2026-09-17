@@ -80,7 +80,8 @@ def _all_in_tariff(db_session, carrier: Carrier) -> Tariff:
 def _origin_mapping(db_session, prefix: str = "19") -> TourOriginMapping:
     mapping = TourOriginMapping(
         tour_number_prefix=prefix,
-        label="Test-Depot Polen",
+        matchcode="TEST-DEPOT",
+        description="Test-Depot Polen",
         origin_address=Address(original_text="Depot, Polen", city="Stettin", country_code="PL"),
     )
     db_session.add(mapping)
@@ -225,6 +226,41 @@ def test_run_tour_audit_falls_back_to_manual_review_without_origin_mapping(db_se
     # Der Tarif greift trotzdem (Fixfracht faellt auf den globalen Standard-Ursprungsland
     # zurueck), nur die Kilometerpruefung selbst bleibt offen.
     assert result.expected_amount == Decimal("350.00")
+
+
+def test_run_tour_audit_falls_back_to_manual_review_on_ambiguous_matchcodes(db_session):
+    """Realer Fall aus Gebietsrelationen.xlsx: derselbe Praefix (z. B. '12')
+    kann mehreren Matchcodes mit UNTERSCHIEDLICHEN Absenderadressen zugeordnet
+    sein - Nutzervorgabe: bei Mehrdeutigkeit bleibt es MANUELLE_PRUEFUNG,
+    statt eine der Adressen zu raten."""
+    carrier = _carrier(db_session)
+    _all_in_tariff(db_session, carrier)
+    db_session.add(TourOriginMapping(
+        tour_number_prefix="12", matchcode="SHUTTLESER", description="Shuttle Dabrowka (UA)",
+        origin_address=Address(original_text="UA 80200 Radekhiv", city="Radekhiv", country_code="UA"),
+    ))
+    db_session.add(TourOriginMapping(
+        tour_number_prefix="12", matchcode="OTTO D", description="OTTO NORD SUED",
+        origin_address=Address(original_text="PL 39-300 Mielec", city="Mielec", country_code="PL"),
+    ))
+    db_session.flush()
+
+    tour = Tour(
+        tour_number="1218622", carrier_id=carrier.id, tour_date=date(2026, 9, 15),
+        invoiced_km=Decimal("50"), invoice_amount=Decimal("350.00"),
+    )
+    db_session.add(tour)
+    db_session.flush()
+    db_session.add(_shipment(tour, carrier, order="A1", postal_code="50259", city="Pulheim", weight_kg="35", sequence=0))
+    db_session.commit()
+
+    result = _run(db_session, tour.id)
+
+    assert result.reference_distance_km is None
+    assert result.status == AuditStatus.MANUELLE_PRUEFUNG
+    assert "mehrdeutig" in result.explanation
+    assert "SHUTTLESER" in result.explanation
+    assert "OTTO D" in result.explanation
 
 
 def test_run_tour_audit_raises_not_found_for_unknown_tour(db_session):

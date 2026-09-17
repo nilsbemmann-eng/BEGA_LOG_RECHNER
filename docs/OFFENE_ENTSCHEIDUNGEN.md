@@ -143,18 +143,37 @@ in diesen Fällen immer `MANUELLE_PRÜFUNG` (siehe `app/audit_engine/`).
   Punkt in der kg-Zeile daher gleichwertig als Tausendertrennzeichen. Das ist
   eine reale, unsaubere Quelldatenabweichung, kein Parserfehler - Summen
   können dadurch in Einzelfällen um 1 kg von der gedruckten SUMME abweichen.
-- **Ursprungsland für Fixfracht-Zuordnung**: Ladelisten enthalten keine
-  Beladeadresse. Nutzerangabe: der Frachtführer lädt "in der Regel" in Polen;
-  eine feinere Zuordnung über die ersten 2 Ziffern der Ladelistennummer wurde
-  angekündigt, die konkrete Zuordnungstabelle liegt aber noch nicht vor.
-  Bis dahin gilt der globale Standardwert `Settings.default_tour_origin_country_code`
-  (`"PL"`) für **alle** Touren. **Offen**: Zuordnungstabelle
-  Ladelistennummer-Prefix -> Ursprungsland/-ort nachreichen, sobald verfügbar.
-- **Kein Multi-Stop-Routing für Touren (MVP)**: `run_tour_audit()` verifiziert
-  die Fixfracht/km-Satz-Anwendung und den Entladestellen-Zuschlag, aber
-  **nicht** die gefahrene Strecke selbst - dafür fehlt eine Geokodierung/Route
-  über alle Entladestellen einer Tour (die bestehende Distanz-Engine ist auf
-  eine einzelne Start-Ziel-Relation ausgelegt). Referenz-km = die vom
-  Frachtführer selbst angegebenen Tour-km (`Tour.invoiced_km`), d. h. eine
-  Kilometer-Abweichungsprüfung findet auf Tour-Ebene aktuell nicht statt.
-  **Offen**: Mehrstopp-Routing als eigenes Feature, falls benötigt.
+- **Ursprungsadresse/-land für Fixfracht-Zuordnung und km-Prüfung ("Absender-Matrix")**:
+  Ladelisten enthalten keine Beladeadresse. Nutzervorgabe: die ersten 2
+  Ziffern der Ladelistennummer ("Präfix") bestimmen den Abgangsort - dafür
+  wurde die reale Stammdatentabelle "Gebietsrelationen.xlsx" bereitgestellt
+  und als `TourOriginMapping`-Modell abgebildet
+  (`app/services/tour_origin_service.py`, `app/services/tour_origin_import_service.py`,
+  Import über `POST /api/tour-origin-mappings/import`, CRUD über
+  `/api/tour-origin-mappings`).
+  - **Wichtige Erkenntnis aus den echten Daten**: ein Präfix ist NICHT
+    eindeutig einem Absender zugeordnet - mehrere "Matchcodes" (Relationen)
+    können denselben Präfix teilen, teils mit unterschiedlichen Adressen
+    (z. B. Präfix 12: ein Matchcode zeigt in die Ukraine, ein anderer nach
+    Mielec/Polen). Ein Matchcode selbst ist ebenfalls nicht global eindeutig
+    (kann bei unterschiedlichen Präfixen wiederkehren).
+  - **Nutzervorgabe zur Auflösung**: zeigen alle für einen Präfix hinterlegten
+    Zeilen mit Adresse auf dieselbe Adresse, wird sie automatisch verwendet.
+    Bei widersprüchlichen Adressen unter demselben Präfix bleibt die Tour
+    bewusst `MANUELLE_PRUEFUNG` (keine Adresse wird geraten) - die
+    widersprüchlichen Matchcodes werden in der Prüfbegründung genannt.
+  - Fehlt jede Zuordnung für einen Präfix, greift für die Fixfracht-Länderpaar-
+    Zuordnung weiterhin der globale Standardwert
+    `Settings.default_tour_origin_country_code` (`"PL"`) - nur die
+    Kilometerprüfung selbst bleibt dann offen (kein Startpunkt für die Route).
+  - Ein Import der Excel-Datei **ersetzt die gesamte Absender-Matrix**
+    (vollständige Referenztabelle, kein inkrementelles Update).
+- **Kilometerprüfung über OSM für Touren (Nutzervorgabe "km Prüfung über OSM")**:
+  `run_tour_audit()` berechnet die Referenzstrecke als Summe der Einzeletappen
+  Depot -> Entladestelle 1 -> ... -> Entladestelle N (Ladelisten-Reihenfolge,
+  über PLZ/Ort dedupliziert), sofern ein eindeutiger Startpunkt (Absender-Matrix)
+  und alle Entladestellen geokodierbar sind - **nicht** eine einzelne
+  OSRM-Mehrstopp-Anfrage. Das ist eine dokumentierte Näherung (Summe der
+  Teilstrecken kann geringfügig von einer echten Rundtour-Optimierung
+  abweichen). Ohne auflösbaren Startpunkt bleibt die Kilometerprüfung
+  `MANUELLE_PRUEFUNG`, die Preis-/Tarifprüfung läuft davon unabhängig weiter.

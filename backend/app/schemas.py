@@ -255,17 +255,19 @@ class TourOut(ORMModel):
 
 class TourOriginMappingCreate(BaseModel):
     tour_number_prefix: str
-    label: str | None = None
+    matchcode: str
+    description: str | None = None
     street: str | None = None
     postal_code: str | None = None
-    city: str
+    city: str | None = None
     country_code: str | None = None
 
 
 class TourOriginMappingOut(ORMModel):
     id: str
     tour_number_prefix: str
-    label: str | None
+    matchcode: str
+    description: str | None
     street: str | None = None
     postal_code: str | None = None
     city: str | None = None
@@ -273,15 +275,21 @@ class TourOriginMappingOut(ORMModel):
 
     @classmethod
     def from_orm_mapping(cls, mapping: "TourOriginMapping") -> "TourOriginMappingOut":  # noqa: F821
+        address = mapping.origin_address
         return cls(
             id=mapping.id,
             tour_number_prefix=mapping.tour_number_prefix,
-            label=mapping.label,
-            street=mapping.origin_address.street,
-            postal_code=mapping.origin_address.postal_code,
-            city=mapping.origin_address.city,
-            country_code=mapping.origin_address.country_code,
+            matchcode=mapping.matchcode,
+            description=mapping.description,
+            street=address.street if address else None,
+            postal_code=address.postal_code if address else None,
+            city=address.city if address else None,
+            country_code=address.country_code if address else None,
         )
+
+
+class TourOriginMatrixImportResult(BaseModel):
+    imported_count: int
 
 
 # --- Audits -----------------------------------------------------------------

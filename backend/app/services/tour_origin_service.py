@@ -1,9 +1,11 @@
-"""Verwaltung der "Absender-Matrix" (BEGA-Finetuning, Nutzervorgabe): ordnet
-die ersten 2 Ziffern der Ladelistennummer einer Beladeadresse zu, da
-Ladelisten selbst keine Beladeadresse enthalten (siehe
+"""Verwaltung der "Absender-Matrix"/"Gebietsrelationen" (BEGA-Finetuning,
+Nutzervorgabe): ordnet Matchcodes/Praefixe der Ladelistennummer einer
+Beladeadresse zu, da Ladelisten selbst keine Beladeadresse enthalten (siehe
 `app/services/ladeliste_pdf_parser.py`, docs/OFFENE_ENTSCHEIDUNGEN.md).
 """
 from __future__ import annotations
+
+from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,9 +16,40 @@ from app.models.tour_origin_mapping import TourOriginMapping
 PREFIX_LENGTH = 2
 
 
-def resolve_tour_origin_address(db: Session, tour_number: str) -> Address | None:
+@dataclass
+class OriginResolution:
+    address: Address | None
+    # Bei mehreren Matchcodes mit unterschiedlichen Adressen fuer denselben
+    # Praefix (real vorkommend, siehe Gebietsrelationen.xlsx) bleibt die
+    # Aufloesung bewusst offen (Nutzervorgabe: "Bei Mehrdeutigkeit: manuelle
+    # Pruefung") - hier werden die widerspruechlichen Matchcodes fuer die
+    # Pruefbegruendung mitgegeben.
+    ambiguous_matchcodes: list[str] = field(default_factory=list)
+
+
+def _address_identity(address: Address) -> tuple:
+    return (address.country_code, address.postal_code, address.city, address.street)
+
+
+def resolve_tour_origin_address(db: Session, tour_number: str) -> OriginResolution:
     prefix = tour_number[:PREFIX_LENGTH]
-    mapping = db.execute(
+    mappings = db.execute(
         select(TourOriginMapping).where(TourOriginMapping.tour_number_prefix == prefix)
-    ).scalars().first()
-    return mapping.origin_address if mapping else None
+    ).scalars().all()
+
+    candidates = [m for m in mappings if m.origin_address is not None]
+    if not candidates:
+        return OriginResolution(address=None)
+
+    distinct_addresses: dict[tuple, TourOriginMapping] = {}
+    for mapping in candidates:
+        distinct_addresses.setdefault(_address_identity(mapping.origin_address), mapping)
+
+    if len(distinct_addresses) == 1:
+        resolved_mapping = next(iter(distinct_addresses.values()))
+        return OriginResolution(address=resolved_mapping.origin_address)
+
+    return OriginResolution(
+        address=None,
+        ambiguous_matchcodes=sorted({m.matchcode for m in candidates}),
+    )
