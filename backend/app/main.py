@@ -10,6 +10,7 @@ from app.api.routers import (
     exports,
     extracted_fields,
     imports,
+    integration_credentials,
     routes,
     shipments,
     special_agreement_surcharges,
@@ -50,6 +51,7 @@ app.include_router(exports.router)
 app.include_router(tours.router)
 app.include_router(tour_origin_mappings.router)
 app.include_router(special_agreement_surcharges.router)
+app.include_router(integration_credentials.router)
 
 
 @app.get("/health", tags=["system"])

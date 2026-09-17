@@ -6,6 +6,8 @@ API-Router und Services haengen nur von den Interfaces in
 """
 from __future__ import annotations
 
+from sqlalchemy.orm import Session
+
 from app.config import Settings
 from app.providers.base import DocumentClassifier, DocumentOcrProvider, EmailProvider, ExportProvider, GeocodingProvider, RoutingProvider
 from app.providers.classification.keyword_classifier import KeywordDocumentClassifier
@@ -14,6 +16,7 @@ from app.providers.geocoding.nominatim_provider import NominatimGeocodingProvide
 from app.providers.ocr.dummy_provider import DummyOcrProvider
 from app.providers.ocr.pdf_text_provider import PdfTextOcrProvider
 from app.providers.routing.osrm_provider import OsrmRoutingProvider
+from app.providers.routing.tomtom_provider import TomTomRoutingProvider
 
 
 def build_geocoding_provider(settings: Settings) -> GeocodingProvider:
@@ -24,9 +27,27 @@ def build_geocoding_provider(settings: Settings) -> GeocodingProvider:
     raise ValueError(f"Unbekannter geocoding_provider: {settings.geocoding_provider}")
 
 
-def build_routing_provider(settings: Settings) -> RoutingProvider:
+def build_routing_provider(settings: Settings, db: Session | None = None) -> RoutingProvider:
     if settings.routing_provider == "osrm":
         return OsrmRoutingProvider(base_url=settings.osrm_base_url)
+    if settings.routing_provider == "tomtom":
+        api_key = settings.tomtom_api_key  # Bootstrap-Fallback (z. B. lokale Entwicklung)
+        if db is not None:
+            from app.services.integration_credential_service import CREDENTIAL_KEY_TOMTOM_API_KEY, get_credential_value
+
+            # Admin-pflegbarer, verschluesselt gespeicherter Schluessel hat
+            # Vorrang vor der Umgebungsvariable (Nutzervorgabe: ueber
+            # Admin-Zugang in der App pflegbar, ohne Neustart/Deploy).
+            db_api_key = get_credential_value(db, settings, CREDENTIAL_KEY_TOMTOM_API_KEY)
+            if db_api_key:
+                api_key = db_api_key
+        if not api_key:
+            raise ValueError(
+                "routing_provider=tomtom benoetigt einen TomTom-API-Key - entweder admin-pflegbar "
+                "ueber POST /api/integration-credentials/tomtom_api_key oder als Umgebungsvariable "
+                "TOMTOM_API_KEY (Bootstrap-Fallback)."
+            )
+        return TomTomRoutingProvider(api_key=api_key, base_url=settings.tomtom_base_url)
     raise ValueError(f"Unbekannter routing_provider: {settings.routing_provider}")
 
 

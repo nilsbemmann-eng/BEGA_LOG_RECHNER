@@ -44,9 +44,22 @@ class Settings(BaseSettings):
     nominatim_user_agent: str = "bega-frachtpreisrechner/1.0 (contact: ops@example.invalid)"
 
     # --- Routing-Provider ---
-    routing_provider: str = "osrm"
+    routing_provider: str = "osrm"  # osrm | tomtom (Nutzervorgabe: TomTom fuer Routing)
     osrm_base_url: str = "https://router.project-osrm.org"
     default_routing_profile: str = "truck"  # siehe docs/OFFENE_ENTSCHEIDUNGEN.md Punkt 5
+
+    # --- TomTom (nur bei routing_provider=tomtom) ---
+    # tomtom_api_key ist nur der Bootstrap-Fallback (z. B. fuer lokale
+    # Entwicklung) - im Betrieb wird der Schluessel bevorzugt admin-pflegbar
+    # ueber /api/integration-credentials verschluesselt in der DB gespeichert
+    # (siehe app/services/integration_credential_service.py, Nutzervorgabe).
+    tomtom_api_key: str | None = None
+    tomtom_base_url: str = "https://api.tomtom.com"
+
+    # --- Verschluesselung admin-pflegbarer Zugangsdaten (Abschnitt 13) ---
+    # Muss eine Umgebungsvariable sein (Fernet.generate_key()), niemals in der
+    # Datenbank - siehe app/services/credential_encryption.py.
+    credential_encryption_key: str | None = None
 
     # --- OCR-Provider ---
     # pdf_text: nur PDFs mit eingebetteter Textebene (kein echter Scan).

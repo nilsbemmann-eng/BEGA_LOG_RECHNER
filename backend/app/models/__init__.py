@@ -8,6 +8,7 @@ from app.models.base import Base
 from app.models.document import Document, DocumentPage, DocumentType, ExtractedField, OcrStatus
 from app.models.email import Email, EmailProcessingStatus
 from app.models.import_job import ImportJob, ImportJobStatus, ImportSourceType
+from app.models.integration_credential import IntegrationCredential
 from app.models.mailbox import Mailbox
 from app.models.party import Carrier, Customer
 from app.models.routing import RoutingResult
@@ -40,6 +41,7 @@ __all__ = [
     "ImportJob",
     "ImportJobStatus",
     "ImportSourceType",
+    "IntegrationCredential",
     "Mailbox",
     "RoutingResult",
     "Shipment",

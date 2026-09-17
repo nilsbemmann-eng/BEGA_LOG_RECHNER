@@ -262,3 +262,32 @@ Wichtigste Unterschiede zur vorherigen MVP-Annahme (jetzt korrigiert):
   "BegaPlanningModul", einer separaten Tourenplanungssoftware), nicht live
   berechnet - unsere OSM/OSRM-basierte automatische Kilometerermittlung ist
   also eine echte Weiterentwicklung, keine Nachbildung des Ist-Zustands.
+
+## Routing-Provider: TomTom (Nutzervorgabe)
+
+- **TomTom statt/zusätzlich zu OSRM**: neuer `TomTomRoutingProvider`
+  (`app/providers/routing/tomtom_provider.py`), austauschbar über
+  `Settings.routing_provider = "tomtom"` (Provider-Pattern, siehe
+  `app/providers/factory.py`) - unterstützt echtes Lkw-Routing
+  (`travelMode=truck`) über TomToms Calculate-Route-API, im Gegensatz zum
+  öffentlichen OSRM-Demo-Server, der nur `driving` kennt.
+- **API-Key admin-pflegbar statt nur Umgebungsvariable** (Nutzervorgabe):
+  neues Modell `IntegrationCredential` speichert den TomTom-API-Key
+  verschlüsselt (Fernet, `app/services/credential_encryption.py`) in der
+  Datenbank, pflegbar über `PUT/DELETE /api/integration-credentials/{key}`
+  (nur Administrator-Rolle). Der Klartextwert wird über die API **nie**
+  zurückgegeben - nur ob/wann ein Wert hinterlegt wurde. Der
+  Verschlüsselungsschlüssel selbst (`CREDENTIAL_ENCRYPTION_KEY`) bleibt eine
+  reine Umgebungsvariable (darf nie in der Datenbank stehen, sonst wäre die
+  Verschlüsselung wertlos). `Settings.tomtom_api_key` (Umgebungsvariable)
+  bleibt als Bootstrap-Fallback bestehen, falls noch kein
+  `CREDENTIAL_ENCRYPTION_KEY` konfiguriert oder noch kein Wert über die API
+  gesetzt ist - der DB-Wert hat Vorrang, sobald er existiert.
+- **Offen**: der Nutzer hat einen echten TomTom-API-Key über einen
+  Claude-MCP-Connector bereitgestellt, nicht direkt im Chat oder als
+  Umgebungsvariable - ein MCP-Connector ist nur für Claude selbst innerhalb
+  dieser Unterhaltung nutzbar, nicht für das laufende Backend. Der
+  tatsächliche Schlüssel muss vom Nutzer selbst über
+  `PUT /api/integration-credentials/tomtom_api_key` eingetragen werden
+  (Admin-Rolle erforderlich), sobald `CREDENTIAL_ENCRYPTION_KEY` konfiguriert
+  ist.

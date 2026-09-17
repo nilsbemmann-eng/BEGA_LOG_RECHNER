@@ -379,6 +379,20 @@ class ExportOut(BaseModel):
     download_url: str
 
 
+# --- Admin-pflegbare Zugangsdaten (z. B. TomTom-API-Key, Nutzervorgabe) -----
+
+
+class IntegrationCredentialSetRequest(BaseModel):
+    value: str
+
+
+class IntegrationCredentialStatusOut(BaseModel):
+    credential_key: str
+    is_configured: bool
+    updated_at: datetime | None
+    updated_by: str | None
+
+
 # --- Fehler -----------------------------------------------------------------
 
 

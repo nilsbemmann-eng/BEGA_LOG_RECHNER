@@ -136,6 +136,15 @@ class TourOriginMatrixImportFailedError(AppError):
     retryable = False
 
 
+class CredentialEncryptionNotConfiguredApiError(AppError):
+    """CREDENTIAL_ENCRYPTION_KEY ist nicht gesetzt - admin-pflegbare
+    Zugangsdaten koennen daher nicht sicher gespeichert werden."""
+
+    error_code = "credential_encryption_not_configured"
+    status_code = 503
+    retryable = False
+
+
 class CarrierRateMatrixImportFailedError(AppError):
     """Die hochgeladene "Stammdaten"-Excel-Datei entspricht nicht der
     erwarteten Spaltenstruktur (siehe app/services/carrier_rate_import_service.py)."""
