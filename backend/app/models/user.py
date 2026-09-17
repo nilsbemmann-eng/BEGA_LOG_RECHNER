@@ -9,9 +9,17 @@ from app.models.base import Base, TimestampMixin, generate_uuid
 
 
 class UserRole(str, enum.Enum):
-    """Rollen aus Abschnitt 3 des technischen Berichts."""
+    """Rollen aus Abschnitt 3 des technischen Berichts.
+
+    `PREISADMIN` ist ein Sub-Admin ohne Zugriff auf Benutzerverwaltung und
+    Integrations-Zugangsdaten, aber mit vollem Zugriff auf die
+    Preis-/Stammdaten-Verwaltung (Spediteure, Tarife, Preistabellen-Import,
+    Absender-Matrix, Sondervereinbarungen) - siehe `app/auth.py::require_role`
+    Verwendung in den jeweiligen Routern.
+    """
 
     ADMIN = "admin"
+    PREISADMIN = "preisadmin"
     PRUEFER = "pruefer"
     VIEWER = "viewer"
 

@@ -13,7 +13,7 @@ export function TopNav() {
         <div className="top-nav-links">
           <Link href="/">Dashboard</Link>
           <Link href="/historie">Historie</Link>
-          {user?.role === "admin" && <Link href="/admincenter">Admincenter</Link>}
+          {(user?.role === "admin" || user?.role === "preisadmin") && <Link href="/admincenter">Admincenter</Link>}
           {!loading && (
             <span className="top-nav-user">
               {user ? (

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import (
     audits,
     auth,
+    carriers,
     documents,
     emails,
     exports,
@@ -49,6 +50,7 @@ app.include_router(extracted_fields.router)
 app.include_router(shipments.router)
 app.include_router(routes.router)
 app.include_router(audits.router)
+app.include_router(carriers.router)
 app.include_router(tariffs.router)
 app.include_router(imports.router)
 app.include_router(exports.router)

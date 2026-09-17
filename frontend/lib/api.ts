@@ -1,6 +1,8 @@
 import type {
   AuditHistoryFilters,
   AuditResultOut,
+  CarrierCreateRequest,
+  CarrierOut,
   ChangePasswordRequest,
   EmailOut,
   EmailUploadResult,
@@ -218,6 +220,14 @@ export function updateUser(id: string, payload: UserUpdateRequest): Promise<User
 
 export function setUserPassword(id: string, payload: SetPasswordRequest): Promise<void> {
   return apiPostNoContent(`/api/users/${id}/set-password`, payload);
+}
+
+export function fetchCarriers(): Promise<CarrierOut[]> {
+  return apiGet<CarrierOut[]>("/api/carriers");
+}
+
+export function createCarrier(payload: CarrierCreateRequest): Promise<CarrierOut> {
+  return apiPost<CarrierOut>("/api/carriers", payload);
 }
 
 export { API_BASE_URL };

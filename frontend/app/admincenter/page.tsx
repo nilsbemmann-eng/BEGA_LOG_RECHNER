@@ -3,10 +3,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth-context";
-import { createUser, fetchUsers, setUserPassword, updateUser } from "../../lib/api";
-import type { UserOut, UserRole } from "../../lib/types";
+import { createCarrier, createUser, fetchCarriers, fetchUsers, setUserPassword, updateUser } from "../../lib/api";
+import type { CarrierOut, UserOut, UserRole } from "../../lib/types";
 
-const ROLES: UserRole[] = ["admin", "pruefer", "viewer"];
+const ROLES: UserRole[] = ["admin", "preisadmin", "pruefer", "viewer"];
+const MANAGE_ROLES: UserRole[] = ["admin", "preisadmin"];
 
 function NewUserForm({ onCreated }: { onCreated: (user: UserOut) => void }) {
   const [name, setName] = useState("");
@@ -162,6 +163,105 @@ function UserRow({ user, onUpdated }: { user: UserOut; onUpdated: (user: UserOut
   );
 }
 
+function NewCarrierForm({ onCreated }: { onCreated: (carrier: CarrierOut) => void }) {
+  const [name, setName] = useState("");
+  const [billingRulesReference, setBillingRulesReference] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setPending(true);
+    try {
+      const carrier = await createCarrier({
+        name,
+        billing_rules_reference: billingRulesReference || null,
+      });
+      onCreated(carrier);
+      setName("");
+      setBillingRulesReference("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Anlegen fehlgeschlagen.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="admin-form">
+      <h3>Neuen Spediteur anlegen</h3>
+      <div className="form-row">
+        <div className="form-field">
+          <label htmlFor="new-carrier-name">Name</label>
+          <input id="new-carrier-name" required value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="new-carrier-billing-ref">Abrechnungshinweis (optional)</label>
+          <input
+            id="new-carrier-billing-ref"
+            placeholder="z. B. siehe Rahmenvertrag 2026"
+            value={billingRulesReference}
+            onChange={(e) => setBillingRulesReference(e.target.value)}
+          />
+        </div>
+        <button type="submit" disabled={pending}>
+          {pending ? "Anlegen..." : "Anlegen"}
+        </button>
+      </div>
+      {error && <div className="form-error">{error}</div>}
+    </form>
+  );
+}
+
+function CarrierSection() {
+  const [carriers, setCarriers] = useState<CarrierOut[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCarriers()
+      .then(setCarriers)
+      .catch((err) => setError(err instanceof Error ? err.message : "Laden fehlgeschlagen."));
+  }, []);
+
+  function handleCarrierCreated(created: CarrierOut) {
+    setCarriers((prev) => (prev ? [...prev, created] : [created]));
+  }
+
+  return (
+    <>
+      <h2>Spediteure</h2>
+      {error && <div className="form-error">{error}</div>}
+      {!carriers ? (
+        <div className="empty-state">Lade Spediteure...</div>
+      ) : carriers.length === 0 ? (
+        <div className="empty-state">Noch keine Spediteure erfasst.</div>
+      ) : (
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Code</th>
+              <th>Abrechnungshinweis</th>
+            </tr>
+          </thead>
+          <tbody>
+            {carriers.map((c) => (
+              <tr key={c.id}>
+                <td>{c.name}</td>
+                <td>{c.carrier_code}</td>
+                <td>{c.billing_rules_reference ?? "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <NewCarrierForm onCreated={handleCarrierCreated} />
+    </>
+  );
+}
+
 export default function AdminCenterPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -193,7 +293,7 @@ export default function AdminCenterPage() {
     return null;
   }
 
-  if (user.role !== "admin") {
+  if (!MANAGE_ROLES.includes(user.role)) {
     return (
       <>
         <h1>Admincenter</h1>
@@ -205,39 +305,50 @@ export default function AdminCenterPage() {
   return (
     <>
       <h1>Admincenter</h1>
-      <p className="subtitle">Benutzerverwaltung und Verwaltungsfunktionen</p>
+      <p className="subtitle">
+        {user.role === "admin"
+          ? "Benutzerverwaltung und Verwaltungsfunktionen"
+          : "Preisadmin: Spediteure, Tarife und Preistabellen pflegen"}
+      </p>
 
-      <h2>Benutzer</h2>
-      {error && <div className="form-error">{error}</div>}
-      {!users ? (
-        <div className="empty-state">Lade Benutzer...</div>
-      ) : (
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>E-Mail</th>
-              <th>Rolle</th>
-              <th>Status</th>
-              <th>Passwort</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <UserRow key={u.id} user={u} onUpdated={handleUserUpdated} />
-            ))}
-          </tbody>
-        </table>
+      {user.role === "admin" && (
+        <>
+          <h2>Benutzer</h2>
+          {error && <div className="form-error">{error}</div>}
+          {!users ? (
+            <div className="empty-state">Lade Benutzer...</div>
+          ) : (
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>E-Mail</th>
+                  <th>Rolle</th>
+                  <th>Status</th>
+                  <th>Passwort</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <UserRow key={u.id} user={u} onUpdated={handleUserUpdated} />
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <NewUserForm onCreated={handleUserCreated} />
+        </>
       )}
 
-      <NewUserForm onCreated={handleUserCreated} />
+      <CarrierSection />
 
       <h2>Weitere Einstellungen</h2>
       <p className="subtitle">
-        Tarife, Absender-Matrix, Sondervereinbarungen, Preistabellen-Import und
-        Integrations-Zugangsdaten werden derzeit direkt ueber die Backend-API
-        verwaltet - eigene Admincenter-Unterseiten dafuer sind noch nicht
-        umgesetzt.
+        Tarife, Absender-Matrix, Sondervereinbarungen und Preistabellen-Import
+        (auch fuer den Preisadmin-Sub-Admin freigegeben) werden derzeit direkt
+        ueber die Backend-API verwaltet - eigene Admincenter-Unterseiten dafuer
+        sind noch nicht umgesetzt. Integrations-Zugangsdaten bleiben
+        Administratoren vorbehalten.
       </p>
     </>
   );

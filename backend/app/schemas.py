@@ -183,6 +183,26 @@ class RouteCalculationResponse(BaseModel):
     from_cache: bool
 
 
+# --- Spediteure (Frachtfuehrer) -----------------------------------------------
+
+
+class CarrierCreateRequest(BaseModel):
+    name: str
+    billing_rules_reference: str | None = None
+
+
+class CarrierUpdateRequest(BaseModel):
+    name: str | None = None
+    billing_rules_reference: str | None = None
+
+
+class CarrierOut(ORMModel):
+    id: str
+    name: str
+    carrier_code: str
+    billing_rules_reference: str | None
+
+
 # --- Tarife -----------------------------------------------------------------
 
 
@@ -308,6 +328,14 @@ class TourOriginMappingCreate(BaseModel):
     country_code: str | None = None
 
 
+class TourOriginMappingUpdateRequest(BaseModel):
+    description: str | None = None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country_code: str | None = None
+
+
 class TourOriginMappingOut(ORMModel):
     id: str
     tour_number_prefix: str
@@ -317,6 +345,8 @@ class TourOriginMappingOut(ORMModel):
     postal_code: str | None = None
     city: str | None = None
     country_code: str | None = None
+    version: int
+    is_current: bool
 
     @classmethod
     def from_orm_mapping(cls, mapping: "TourOriginMapping") -> "TourOriginMappingOut":  # noqa: F821
@@ -330,6 +360,8 @@ class TourOriginMappingOut(ORMModel):
             postal_code=address.postal_code if address else None,
             city=address.city if address else None,
             country_code=address.country_code if address else None,
+            version=mapping.version,
+            is_current=mapping.is_current,
         )
 
 
@@ -347,11 +379,18 @@ class SpecialAgreementSurchargeCreate(BaseModel):
     note: str | None = None
 
 
+class SpecialAgreementSurchargeUpdateRequest(BaseModel):
+    amount: Decimal | None = None
+    note: str | None = None
+
+
 class SpecialAgreementSurchargeOut(ORMModel):
     id: str
     tour_number_prefix: str
     amount: Decimal
     note: str | None
+    version: int
+    is_current: bool
 
 
 # --- Audits -----------------------------------------------------------------

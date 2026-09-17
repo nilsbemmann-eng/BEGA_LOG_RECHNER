@@ -86,7 +86,7 @@ export interface EmailUploadResult {
 
 // --- Login / Benutzerverwaltung (Abschnitt 3) --------------------------------
 
-export type UserRole = "admin" | "pruefer" | "viewer";
+export type UserRole = "admin" | "preisadmin" | "pruefer" | "viewer";
 
 export interface UserOut {
   id: string;
@@ -128,4 +128,18 @@ export interface UserUpdateRequest {
 
 export interface SetPasswordRequest {
   new_password: string;
+}
+
+// --- Spediteure (Frachtfuehrer) -----------------------------------------------
+
+export interface CarrierOut {
+  id: string;
+  name: string;
+  carrier_code: string;
+  billing_rules_reference: string | null;
+}
+
+export interface CarrierCreateRequest {
+  name: string;
+  billing_rules_reference?: string | null;
 }

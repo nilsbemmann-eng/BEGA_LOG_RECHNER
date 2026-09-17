@@ -37,7 +37,10 @@ def _address_identity(address: Address) -> tuple:
 def resolve_tour_origin_address(db: Session, tour_number: str) -> OriginResolution:
     prefix = tour_number[:PREFIX_LENGTH]
     mappings = db.execute(
-        select(TourOriginMapping).where(TourOriginMapping.tour_number_prefix == prefix)
+        select(TourOriginMapping).where(
+            TourOriginMapping.tour_number_prefix == prefix,
+            TourOriginMapping.is_current.is_(True),
+        )
     ).scalars().all()
 
     candidates = [m for m in mappings if m.origin_address is not None]
@@ -64,6 +67,9 @@ def resolve_special_agreement_surcharge(db: Session, tour_number: str) -> Decima
     kein Zuschlag hinterlegt ist."""
     prefix = tour_number[:PREFIX_LENGTH]
     surcharge = db.execute(
-        select(SpecialAgreementSurcharge).where(SpecialAgreementSurcharge.tour_number_prefix == prefix)
+        select(SpecialAgreementSurcharge).where(
+            SpecialAgreementSurcharge.tour_number_prefix == prefix,
+            SpecialAgreementSurcharge.is_current.is_(True),
+        )
     ).scalars().first()
     return surcharge.amount if surcharge else Decimal("0")

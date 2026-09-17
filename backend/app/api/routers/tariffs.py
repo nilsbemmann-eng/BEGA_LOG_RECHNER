@@ -14,6 +14,8 @@ from app.services.carrier_rate_import_service import CarrierRateMatrixParsingErr
 
 router = APIRouter(prefix="/api/tariffs", tags=["tariffs"], dependencies=[Depends(get_current_user)])
 
+_MANAGE_ROLES = (UserRole.ADMIN, UserRole.PREISADMIN)
+
 
 @router.get("", response_model=list[TariffOut])
 def list_tariffs(db: Session = Depends(get_db)) -> list[Tariff]:
@@ -24,7 +26,7 @@ def list_tariffs(db: Session = Depends(get_db)) -> list[Tariff]:
 def create_tariff(
     request: TariffCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(*_MANAGE_ROLES)),
 ) -> Tariff:
     """Tarife anlegen ist Administrator-Aufgabe (Abschnitt 3.1). Jeder Tarif ist
     unveraenderlich: Aenderungen erfordern einen neuen Datensatz (Abschnitt 6.2)."""
@@ -53,7 +55,7 @@ def create_tariff(
 async def import_carrier_rate_matrix_endpoint(
     file: UploadFile,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(require_role(UserRole.ADMIN)),
+    _current_user: User = Depends(require_role(*_MANAGE_ROLES)),
 ) -> CarrierRateMatrixImportResult:
     """Importiert die reale Frachtfuehrer-Preistabelle ("Stammdaten"-Blatt aus
     "Preise_2026_fuer_Wolke.xlsm", BEGA-Finetuning): legt fuer jeden Frachtfuehrer

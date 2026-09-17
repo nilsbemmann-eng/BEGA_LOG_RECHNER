@@ -58,6 +58,35 @@ def test_create_and_list_tour_origin_mapping(client, db_session):
     assert len(list_response.json()) == 1
 
 
+def test_patch_tour_origin_mapping_creates_new_version(client, db_session):
+    _seed_admin(db_session)
+    created = client.post(
+        "/api/tour-origin-mappings",
+        json={"tour_number_prefix": "19", "matchcode": "MP", "city": "Stettin", "country_code": "PL"},
+    ).json()
+
+    patched = client.patch(f"/api/tour-origin-mappings/{created['id']}", json={"city": "Warschau"})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["city"] == "Warschau"
+    assert patched.json()["version"] == 2
+
+    current = client.get("/api/tour-origin-mappings").json()
+    assert len(current) == 1
+    assert current[0]["city"] == "Warschau"
+
+    history = client.get("/api/tour-origin-mappings?include_history=true").json()
+    assert len(history) == 2
+
+
+def test_create_tour_origin_mapping_rejects_duplicate_current_pair(client, db_session):
+    _seed_admin(db_session)
+    client.post("/api/tour-origin-mappings", json={"tour_number_prefix": "19", "matchcode": "MP"})
+
+    response = client.post("/api/tour-origin-mappings", json={"tour_number_prefix": "19", "matchcode": "MP"})
+
+    assert response.status_code == 409
+
+
 def test_run_tour_audit_endpoint_and_tour_endpoints(client, db_session):
     _seed_admin(db_session)
 

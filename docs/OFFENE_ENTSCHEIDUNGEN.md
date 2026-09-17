@@ -291,3 +291,37 @@ Wichtigste Unterschiede zur vorherigen MVP-Annahme (jetzt korrigiert):
   `PUT /api/integration-credentials/tomtom_api_key` eingetragen werden
   (Admin-Rolle erforderlich), sobald `CREDENTIAL_ENCRYPTION_KEY` konfiguriert
   ist.
+
+## Versionsnummern, Spediteur-Erfassung, Sub-Admin-Rolle (Nutzervorgabe)
+
+- **Versionierung auf Sondervereinbarungen und Absender-Matrix ausgeweitet**:
+  `Tariff` war bereits versioniert (unveränderlich, sobald in einem
+  `AuditResult` referenziert). `SpecialAgreementSurcharge` und
+  `TourOriginMapping` hatten das NICHT: ein erneuter Excel-Import der
+  Absender-Matrix hat bisher `DELETE FROM tour_origin_mappings` ausgeführt
+  (kompletter Datenverlust der Historie), und Sondervereinbarungen wurden per
+  DELETE+POST "editiert". Beides ist jetzt analog zu `Tariff` versioniert
+  (`version: int`, `is_current: bool`, partieller Unique-Index nur auf die
+  jeweils aktuelle Zeile): PATCH legt eine neue Version an statt in-place zu
+  ändern, DELETE setzt nur `is_current=False`, ein Re-Import von
+  Gebietsrelationen.xlsx löst nur geänderte/entfallene Zeilen ab statt alles
+  zu löschen. `GET`-Endpunkte liefern per Default nur die aktuelle Version,
+  `?include_history=true` zeigt die volle Historie. **Interpretation**: die
+  Nutzeranfrage "Versionsnummern einführen" wurde so verstanden, dass
+  Preis-Stammdaten (nicht nur Tarife) nachvollziehbar bleiben müssen, analog
+  zum bereits bestehenden Tariff-Muster - falls stattdessen eine reine
+  App-Build-Versionsnummer gemeint war, bitte Rückmeldung.
+- **Erfassungsmaske für Spediteure**: bisher gab es keinen manuellen
+  Anlage-Weg für `Carrier` (nur automatisches Anlegen beim
+  Preistabellen-Import). Neuer Endpunkt `POST/PATCH /api/carriers` +
+  Admincenter-Formular (Name, optionaler Abrechnungshinweis). Der
+  `carrier_code`-Generator wurde aus `carrier_rate_import_service.py` in
+  `app/services/carrier_service.py` ausgelagert, damit ein manuell erfasster
+  Spediteur beim nächsten Excel-Import über den Namen wiedererkannt (nicht
+  doppelt angelegt) wird.
+- **Sub-Admin-Rolle `PREISADMIN`** ("Frachtpreise pflegen"): neue Rolle
+  zwischen Admin und Prüfer/Viewer mit Zugriff auf Spediteure, Tarife,
+  Preistabellen-Import, Absender-Matrix und Sondervereinbarungen, aber
+  **ohne** Zugriff auf Benutzerverwaltung (`/api/users`) und
+  Integrations-Zugangsdaten (`/api/integration-credentials`, z. B.
+  TomTom-Key) - diese beiden bleiben exklusiv Administratoren vorbehalten.

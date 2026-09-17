@@ -20,8 +20,6 @@ Excel, siehe docs/OFFENE_ENTSCHEIDUNGEN.md).
 from __future__ import annotations
 
 import io
-import re
-import unicodedata
 from datetime import date
 
 from openpyxl import load_workbook
@@ -30,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.models.party import Carrier
 from app.models.tariff import Tariff, TariffRule, TariffRuleType, TariffStatus
+from app.services.carrier_service import find_or_create_carrier
 
 _SHEET_NAME = "Stammdaten"
 _HEADER_LABEL = "ISO Code 1 (alpha-2)"
@@ -52,30 +51,6 @@ _NON_CARRIER_LABELS = {
 
 class CarrierRateMatrixParsingError(ValueError):
     """Wird geworfen, wenn die Excel-Struktur nicht der erwarteten Stammdaten-Vorlage entspricht."""
-
-
-def _slugify_carrier_code(name: str) -> str:
-    normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", normalized).strip("-").upper()
-    return slug or "CARRIER"
-
-
-def _find_or_create_carrier(db: Session, name: str) -> Carrier:
-    carrier = db.execute(select(Carrier).where(Carrier.name == name)).scalars().first()
-    if carrier is not None:
-        return carrier
-
-    base_code = _slugify_carrier_code(name)
-    code = base_code
-    suffix = 1
-    while db.execute(select(Carrier).where(Carrier.carrier_code == code)).scalars().first() is not None:
-        suffix += 1
-        code = f"{base_code}-{suffix}"
-
-    carrier = Carrier(name=name, carrier_code=code)
-    db.add(carrier)
-    db.flush()
-    return carrier
 
 
 def _upsert_tariff(db: Session, carrier: Carrier, price_per_km_by_country: dict[str, str]) -> None:
@@ -148,7 +123,7 @@ def import_carrier_rate_matrix(db: Session, file_bytes: bytes) -> int:
         if not price_per_km_by_country:
             continue
 
-        carrier = _find_or_create_carrier(db, carrier_name)
+        carrier = find_or_create_carrier(db, carrier_name)
         _upsert_tariff(db, carrier, price_per_km_by_country)
         imported += 1
 

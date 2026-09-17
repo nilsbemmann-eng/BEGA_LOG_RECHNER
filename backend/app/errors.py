@@ -163,6 +163,24 @@ class CarrierRateMatrixImportFailedError(AppError):
     retryable = False
 
 
+class CarrierAlreadyExistsError(AppError):
+    """Ein Spediteur mit diesem Namen ist bereits angelegt (`Carrier.name`)."""
+
+    error_code = "carrier_already_exists"
+    status_code = 409
+    retryable = False
+
+
+class MasterDataConflictError(AppError):
+    """Eine aktuelle Version fuer diesen Schluessel (z. B. Ladelisten-Praefix,
+    Praefix+Matchcode) existiert bereits oder der referenzierte Datensatz ist
+    nicht mehr aktuell (`is_current=False`) und daher nicht mehr editierbar."""
+
+    error_code = "master_data_conflict"
+    status_code = 409
+    retryable = False
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:  # noqa: ARG001

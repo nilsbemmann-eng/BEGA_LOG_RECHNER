@@ -58,16 +58,25 @@ def test_import_maps_german_country_prefix_to_iso_code(db_session):
     assert mapping.origin_address.city == "Hamburg"
 
 
-def test_import_replaces_existing_matrix_entirely(db_session):
+def test_import_replaces_current_matrix_but_keeps_history(db_session):
+    """Ein erneuter Import ersetzt die AKTUELLE Absender-Matrix, loescht aber
+    keine Zeilen physisch (Versionierung, siehe app/models/tour_origin_mapping.py) -
+    die alte Zuordnung bleibt mit is_current=False fuer vergangene Tour-Audits
+    nachvollziehbar erhalten."""
     import_tour_origin_matrix(db_session, _workbook_bytes([("OLD", "Alt", 1, "X", "PL 00-000 Alt Altstr. 1")]))
     db_session.commit()
 
     import_tour_origin_matrix(db_session, _workbook_bytes([("NEW", "Neu", 2, "Y", "PL 00-001 Neu Neustr. 2")]))
     db_session.commit()
 
-    mappings = db_session.execute(select(TourOriginMapping)).scalars().all()
-    assert len(mappings) == 1
-    assert mappings[0].matchcode == "NEW"
+    current = db_session.execute(select(TourOriginMapping).where(TourOriginMapping.is_current.is_(True))).scalars().all()
+    assert len(current) == 1
+    assert current[0].matchcode == "NEW"
+
+    all_mappings = db_session.execute(select(TourOriginMapping)).scalars().all()
+    assert len(all_mappings) == 2
+    old = next(m for m in all_mappings if m.matchcode == "OLD")
+    assert old.is_current is False
 
 
 def test_import_raises_on_unexpected_header(db_session):
