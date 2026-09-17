@@ -15,6 +15,7 @@ from app.models.shipment import Shipment
 from app.models.surcharge import SurchargeClaim, SurchargeStatus, SurchargeType
 from app.models.tariff import Tariff, TariffRule, TariffRuleType, TariffStatus
 from app.models.tour import Tour
+from app.models.tour_origin_mapping import TourOriginMapping
 from app.models.user import User, UserRole
 
 __all__ = [

@@ -40,3 +40,7 @@ class Tour(Base, TimestampMixin):
     audit_results: Mapped[list["AuditResult"]] = relationship(  # noqa: F821
         back_populates="tour", cascade="all, delete-orphan"
     )
+
+    @property
+    def shipment_count(self) -> int:
+        return len(self.shipments)

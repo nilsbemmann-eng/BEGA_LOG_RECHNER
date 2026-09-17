@@ -131,7 +131,7 @@ def import_ladeliste_pdf(
     db.add(tour)
     db.flush()
 
-    for order in parsed.orders:
+    for sequence, order in enumerate(parsed.orders):
         destination_address = None
         if order.address is not None:
             destination_address = Address(
@@ -151,6 +151,9 @@ def import_ladeliste_pdf(
                 weight_kg=order.weight_kg,
                 volume_m3=order.volume_m3,
                 packages=order.quantity_total,
+                # Ladelisten-Reihenfolge, fuer die Mehrstopp-Routenberechnung in
+                # run_tour_audit (siehe docs/OFFENE_ENTSCHEIDUNGEN.md).
+                sequence_in_tour=sequence,
             )
         )
 

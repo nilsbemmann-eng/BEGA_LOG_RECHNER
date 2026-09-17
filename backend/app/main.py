@@ -3,7 +3,19 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import audits, documents, emails, exports, extracted_fields, imports, routes, shipments, tariffs
+from app.api.routers import (
+    audits,
+    documents,
+    emails,
+    exports,
+    extracted_fields,
+    imports,
+    routes,
+    shipments,
+    tariffs,
+    tour_origin_mappings,
+    tours,
+)
 from app.config import get_settings
 from app.errors import register_exception_handlers
 
@@ -34,6 +46,8 @@ app.include_router(audits.router)
 app.include_router(tariffs.router)
 app.include_router(imports.router)
 app.include_router(exports.router)
+app.include_router(tours.router)
+app.include_router(tour_origin_mappings.router)
 
 
 @app.get("/health", tags=["system"])

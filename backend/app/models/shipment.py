@@ -26,6 +26,10 @@ class Shipment(Base, TimestampMixin):
     # Frachtrechnung sich auf die gesamte Tour bezieht statt auf die
     # Einzelsendung (siehe app/models/tour.py).
     tour_id: Mapped[str | None] = mapped_column(ForeignKey("tours.id"), nullable=True)
+    # Reihenfolge in der Ladeliste (0-basiert), nur bei Tour-Sendungen gesetzt -
+    # wird fuer die Mehrstopp-Routenberechnung (Depot -> Stopp 1 -> ... -> Stopp N)
+    # in `run_tour_audit` benoetigt (siehe docs/OFFENE_ENTSCHEIDUNGEN.md).
+    sequence_in_tour: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     weight_kg: Mapped[Money | None] = mapped_column(Numeric(12, 3), nullable=True)
     pallets: Mapped[int | None] = mapped_column(Integer, nullable=True)

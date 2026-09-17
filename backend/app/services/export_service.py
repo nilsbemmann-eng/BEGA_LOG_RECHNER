@@ -7,10 +7,11 @@ from app.providers.base import ExportProvider, ExportRequest, ExportResult
 
 
 def _audit_result_to_row(audit_result: AuditResult) -> dict:
-    shipment = audit_result.shipment
     return {
         "audit_result_id": audit_result.id,
-        "shipment_number": shipment.shipment_number if shipment else None,
+        # Faellt bei Tour-Pruefungen auf die Ladelistennummer zurueck (siehe
+        # AuditResult.shipment_number in app/models/audit.py).
+        "shipment_number": audit_result.shipment_number,
         "status": audit_result.status.value,
         "reference_distance_km": audit_result.reference_distance_km,
         "invoiced_distance_km": audit_result.invoiced_distance_km,

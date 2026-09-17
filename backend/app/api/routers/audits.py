@@ -15,10 +15,11 @@ from app.models.audit import AuditResult, AuditStatus
 from app.models.audit_log import AuditLogEntry
 from app.models.party import Carrier
 from app.models.shipment import Shipment
+from app.models.tour import Tour
 from app.models.user import User, UserRole
 from app.providers.base import GeocodingProvider, RoutingProvider
-from app.schemas import AuditDecisionRequest, AuditResultOut, AuditRunRequest
-from app.services.audit_service import run_audit
+from app.schemas import AuditDecisionRequest, AuditResultOut, AuditRunRequest, TourAuditRunRequest
+from app.services.audit_service import run_audit, run_tour_audit
 
 router = APIRouter(prefix="/api/audits", tags=["audits"], dependencies=[Depends(get_current_user)])
 
@@ -37,6 +38,22 @@ def run_audit_endpoint(
     return audit_result
 
 
+@router.post("/run-tour", response_model=AuditResultOut)
+def run_tour_audit_endpoint(
+    request: TourAuditRunRequest,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    geocoding_provider: GeocodingProvider = Depends(get_geocoding_provider),
+    routing_provider: RoutingProvider = Depends(get_routing_provider),
+) -> AuditResult:
+    """Preispruefung fuer eine ganze Tour/Ladeliste (BEGA-Finetuning: eine
+    Frachtrechnung pro Tour statt pro Einzelsendung, siehe app/models/tour.py)."""
+    audit_result = run_tour_audit(db, request.tour_id, settings, geocoding_provider, routing_provider)
+    db.commit()
+    db.refresh(audit_result)
+    return audit_result
+
+
 @router.get("", response_model=list[AuditResultOut])
 def list_audits(
     db: Session = Depends(get_db),
@@ -49,21 +66,27 @@ def list_audits(
     date_from: date | None = Query(default=None, description="Transportdatum von (einschliesslich)"),
     date_to: date | None = Query(default=None, description="Transportdatum bis (einschliesslich)"),
 ) -> list[AuditResult]:
-    """Historie der Pruefergebnisse (Abschnitt 12) mit Such- und Filterfunktion."""
+    """Historie der Pruefergebnisse (Abschnitt 12) mit Such- und Filterfunktion.
+
+    `AuditResult.shipment_id`/`tour_id` sind alternativ gesetzt (Tour-Pruefung,
+    BEGA-Finetuning, siehe app/models/tour.py) - daher Outer-Joins auf beide
+    Seiten statt eines Inner-Joins auf `Shipment`, sonst wuerden Tour-Ergebnisse
+    aus der Historie verschwinden."""
     query = (
         select(AuditResult)
-        .join(Shipment, AuditResult.shipment_id == Shipment.id)
-        .outerjoin(Carrier, Shipment.carrier_id == Carrier.id)
+        .outerjoin(Shipment, AuditResult.shipment_id == Shipment.id)
+        .outerjoin(Tour, AuditResult.tour_id == Tour.id)
+        .outerjoin(Carrier, or_(Shipment.carrier_id == Carrier.id, Tour.carrier_id == Carrier.id))
     )
 
     if status is not None:
         query = query.where(AuditResult.status == status)
     if carrier_id is not None:
-        query = query.where(Shipment.carrier_id == carrier_id)
+        query = query.where(or_(Shipment.carrier_id == carrier_id, Tour.carrier_id == carrier_id))
     if date_from is not None:
-        query = query.where(Shipment.transport_date >= date_from)
+        query = query.where(or_(Shipment.transport_date >= date_from, Tour.tour_date >= date_from))
     if date_to is not None:
-        query = query.where(Shipment.transport_date <= date_to)
+        query = query.where(or_(Shipment.transport_date <= date_to, Tour.tour_date <= date_to))
     if q:
         like_pattern = f"%{q.strip()}%"
         query = query.where(
@@ -71,6 +94,7 @@ def list_audits(
                 Shipment.shipment_number.ilike(like_pattern),
                 Shipment.transport_order_number.ilike(like_pattern),
                 Shipment.invoice_number.ilike(like_pattern),
+                Tour.tour_number.ilike(like_pattern),
                 Carrier.name.ilike(like_pattern),
             )
         )

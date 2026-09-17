@@ -193,12 +193,107 @@ class SurchargeClaimOut(ORMModel):
     reason: str | None
 
 
+# --- Touren (BEGA-Finetuning: eine Frachtrechnung pro Tour/Ladeliste) --------
+
+
+class TourShipmentOut(ORMModel):
+    id: str
+    shipment_number: str | None
+    weight_kg: Decimal | None
+    volume_m3: Decimal | None
+    packages: int | None
+    destination_postal_code: str | None = None
+    destination_city: str | None = None
+
+    @classmethod
+    def from_orm_shipment(cls, shipment: "Shipment") -> "TourShipmentOut":  # noqa: F821
+        return cls(
+            id=shipment.id,
+            shipment_number=shipment.shipment_number,
+            weight_kg=shipment.weight_kg,
+            volume_m3=shipment.volume_m3,
+            packages=shipment.packages,
+            destination_postal_code=shipment.destination_address.postal_code if shipment.destination_address else None,
+            destination_city=shipment.destination_address.city if shipment.destination_address else None,
+        )
+
+
+class TourOut(ORMModel):
+    id: str
+    tour_number: str
+    version: str | None
+    carrier_id: str | None
+    carrier_name: str | None = None
+    tour_date: date | None
+    loading_date: date | None
+    invoiced_km: Decimal | None
+    invoice_amount: Decimal | None
+    currency: str
+    shipment_count: int
+    shipments: list[TourShipmentOut] = []
+
+    @classmethod
+    def from_orm_tour(cls, tour: "Tour") -> "TourOut":  # noqa: F821
+        return cls(
+            id=tour.id,
+            tour_number=tour.tour_number,
+            version=tour.version,
+            carrier_id=tour.carrier_id,
+            carrier_name=tour.carrier.name if tour.carrier else None,
+            tour_date=tour.tour_date,
+            loading_date=tour.loading_date,
+            invoiced_km=tour.invoiced_km,
+            invoice_amount=tour.invoice_amount,
+            currency=tour.currency,
+            shipment_count=tour.shipment_count,
+            shipments=[TourShipmentOut.from_orm_shipment(s) for s in tour.shipments],
+        )
+
+
+# --- Absender-Matrix (BEGA-Finetuning: LL-Nummer-Praefix -> Beladeadresse) ---
+
+
+class TourOriginMappingCreate(BaseModel):
+    tour_number_prefix: str
+    label: str | None = None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str
+    country_code: str | None = None
+
+
+class TourOriginMappingOut(ORMModel):
+    id: str
+    tour_number_prefix: str
+    label: str | None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country_code: str | None = None
+
+    @classmethod
+    def from_orm_mapping(cls, mapping: "TourOriginMapping") -> "TourOriginMappingOut":  # noqa: F821
+        return cls(
+            id=mapping.id,
+            tour_number_prefix=mapping.tour_number_prefix,
+            label=mapping.label,
+            street=mapping.origin_address.street,
+            postal_code=mapping.origin_address.postal_code,
+            city=mapping.origin_address.city,
+            country_code=mapping.origin_address.country_code,
+        )
+
+
 # --- Audits -----------------------------------------------------------------
 
 
 class AuditRunRequest(BaseModel):
     shipment_id: str
     route_context: str = "standard"  # standard | inner_city_or_hard_to_access | special_route
+
+
+class TourAuditRunRequest(BaseModel):
+    tour_id: str
 
 
 class AuditRuleResultOut(ORMModel):
@@ -212,7 +307,8 @@ class AuditRuleResultOut(ORMModel):
 
 class AuditResultOut(ORMModel):
     id: str
-    shipment_id: str
+    shipment_id: str | None
+    tour_id: str | None = None
     shipment_number: str | None
     carrier_name: str | None
     transport_date: date | None
