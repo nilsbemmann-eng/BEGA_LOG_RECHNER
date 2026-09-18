@@ -325,3 +325,58 @@ Wichtigste Unterschiede zur vorherigen MVP-Annahme (jetzt korrigiert):
   **ohne** Zugriff auf Benutzerverwaltung (`/api/users`) und
   Integrations-Zugangsdaten (`/api/integration-credentials`, z. B.
   TomTom-Key) - diese beiden bleiben exklusiv Administratoren vorbehalten.
+
+## Ausgehende Touren als Preis-Basis (Nutzervorgabe, Roadmap)
+
+**Problem**: Bisher entsteht eine `Tour` erst, wenn die Ladeliste vom
+Spediteur zurückkommt und per PDF-Parser eingelesen wird
+(`Tour.source_document_id`). Manche Spediteure schicken aber nur eine
+Kurz-Rückmeldung ("LL-Nr. X, Betrag Y EUR") ohne vollständige Ladeliste
+zurück - dann fehlen Route, Entladestellen und km komplett, und die
+Prüfregel-Engine hat keine Berechnungsgrundlage (zwangsläufig
+MANUELLE_PRÜFUNG für jede solche Tour).
+
+**Lösung (Nutzervorgabe): Datenfluss umdrehen.** BEGA erstellt die Ladeliste
+selbst (identisches PDF-Format wie die bereits verarbeiteten realen
+Beispiele) und kennt die Route daher bereits VOR dem Versand. Die Tour wird
+künftig beim Versand angelegt (Baseline mit voller Route), nicht erst beim
+Empfang der Rückmeldung - die Rückmeldung des Spediteurs muss dann nur noch
+den Rechnungsbetrag liefern, verknüpft über die Ladelistennummer.
+
+### Phase 1 (kurzfristig umsetzbar, konkreter Vorschlag)
+
+1. Neues Feld `Tour.status`: `GEPLANT` → `VERSENDET` → `ABGERECHNET`.
+2. Die Ladeliste, die an den Spediteur rausgeht, wird beim Erstellen sofort
+   über den bestehenden `ladeliste_pdf_parser.py` importiert (derselbe
+   Parser wie heute, nur zu einem anderen Zeitpunkt im Prozess ausgelöst) →
+   Tour mit vollem Stopp-/Routen-Datensatz, Status `VERSENDET`,
+   `invoice_amount = NULL`.
+3. Neuer, bewusst einfacher Kurzform-Parser für Rückmeldungen ohne
+   vollständige Ladeliste (E-Mail-Text oder schlanke Tabelle mit nur
+   LL-Nummer + Betrag): matcht per `tour_number` auf die bereits
+   vorhandene `VERSENDET`-Tour, trägt nur `invoice_amount` (+ Rechnungsnummer/
+   -datum, falls vorhanden) nach → Status `ABGERECHNET`.
+4. Fallback konsistent mit dem bestehenden Prinzip: keine passende
+   `VERSENDET`-Tour zur LL-Nummer gefunden → MANUELLE_PRÜFUNG statt Raten.
+5. Prüfregel-Engine, Tarif-Engine und Routing bleiben unverändert - sie
+   bekommen ihre Eingabedaten nur früher im Prozess.
+
+### Phase 2 (perspektivisch, Nutzervorgabe: "noch zu konzeptionieren")
+
+Ausbau zu einem echten Tourenplanungstool im Frachtpreisrechner statt
+Ladelisten-Erstellung in einem externen Tool:
+
+- Neues Planungsmodul im Admincenter: Sachbearbeiter stellt eine Tour aus
+  offenen Sendungen/Aufträgen zusammen und wählt den Frachtführer.
+- Sofort-Berechnung vor Versand mit derselben Tarif-/Routing-Engine wie
+  heute für die Prüfung - Plausibilitätscheck vor dem Versand (z. B.
+  ungewöhnlich teurer Frachtführer für eine Relation erkennen).
+- Automatische Ladelisten-PDF-Generierung aus dem Planungsdatensatz statt
+  manueller Erstellung - Route/Stopps liegen dann von Anfang an strukturiert
+  vor, kein Parsing mehr für den eigenen Versand nötig.
+- Mögliche Erweiterung: Frachtführerauswahl/-empfehlung anhand der
+  bestehenden Preistabelle (`Tariff`/`CarrierRate`).
+
+Deutlich größerer Scope als der bisherige (reine Prüfung von Fremddaten)
+Frachtpreisrechner - als eigener Baustein auf demselben Datenmodell/derselben
+Engine geplant, noch nicht implementiert.
