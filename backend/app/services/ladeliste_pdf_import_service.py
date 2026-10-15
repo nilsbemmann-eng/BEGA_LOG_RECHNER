@@ -33,6 +33,23 @@ from app.services.email_service import get_or_create_manual_upload_mailbox, pers
 from app.services.ladeliste_pdf_parser import LadelistePdfParsingError, parse_ladeliste_pdf
 from app.storage import StorageBackend, sha256_hex
 
+# Nutzervorgabe (siehe docs/OFFENE_ENTSCHEIDUNGEN.md): Ladelisten mit
+# Praefix 49, die vom Spediteur "Daniela" gefahren werden, sind
+# Ruecknahmen von Polstermoebeln bei Kunden - keine Frachtfuehrer-Tour
+# und damit fuer diese Preispruefung irrelevant. Sie werden bereits beim
+# Import erkannt und uebersprungen, ohne eine Tour anzulegen.
+IRRELEVANT_RETURN_TOUR_PREFIX = "49"
+IRRELEVANT_RETURN_CARRIER_KEYWORD = "daniela"
+
+
+def _is_customer_return_pickup(tour_number: str, carrier_name: str | None) -> bool:
+    if not carrier_name:
+        return False
+    return (
+        tour_number.startswith(IRRELEVANT_RETURN_TOUR_PREFIX)
+        and IRRELEVANT_RETURN_CARRIER_KEYWORD in carrier_name.strip().lower()
+    )
+
 
 def _fail(db: Session, job: ImportJob, message: str, records_failed: int) -> ImportJob:
     job.completed_at = datetime.now(timezone.utc)
@@ -73,6 +90,20 @@ def import_ladeliste_pdf(
         return _fail(db, job, f"Ladeliste-PDF konnte nicht gelesen werden: {exc}", records_failed=1)
 
     job.records_total = len(parsed.orders)
+
+    if _is_customer_return_pickup(parsed.tour_number, parsed.carrier_name):
+        job.completed_at = datetime.now(timezone.utc)
+        job.status = ImportJobStatus.SKIPPED_IRRELEVANT
+        job.records_successful = 0
+        job.records_failed = 0
+        job.error_report_reference = (
+            f"Ladeliste {parsed.tour_number} (Spediteur '{parsed.carrier_name}') wurde automatisch "
+            "uebersprungen: Ladelisten mit Praefix 49 und Spediteur 'Daniela' sind Ruecknahmen von "
+            "Polstermoebeln bei Kunden und fuer die Frachtpreispruefung nicht relevant. Es wurde "
+            "keine Tour angelegt."
+        )
+        db.flush()
+        return job
 
     existing_tour = db.execute(select(Tour).where(Tour.tour_number == parsed.tour_number)).scalar_one_or_none()
     if existing_tour is not None:

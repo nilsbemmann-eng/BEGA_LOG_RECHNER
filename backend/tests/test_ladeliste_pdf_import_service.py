@@ -132,3 +132,43 @@ def test_import_fails_gracefully_on_parsing_error(db_session, tmp_path):
     assert job.status == ImportJobStatus.FAILED
     assert "kaputtes Layout" in job.error_report_reference
     assert db_session.execute(select(Tour)).scalars().first() is None
+
+
+def test_import_skips_daniela_49er_customer_returns(db_session, tmp_path):
+    with patch(_PATCH_TARGET, return_value=_make_parsed(tour_number="4914114", carrier_name="Daniela")):
+        job = import_ladeliste_pdf(db_session, b"%PDF-fake", "ll.pdf", _storage(tmp_path), str(tmp_path / "reports"))
+    db_session.commit()
+
+    assert job.status == ImportJobStatus.SKIPPED_IRRELEVANT
+    assert job.records_successful == 0
+    assert job.records_failed == 0
+    assert "Daniela" in job.error_report_reference
+    assert db_session.execute(select(Tour)).scalars().first() is None
+    assert db_session.execute(select(Shipment)).scalars().first() is None
+
+
+def test_import_skips_daniela_49er_case_insensitively_and_with_suffix(db_session, tmp_path):
+    with patch(_PATCH_TARGET, return_value=_make_parsed(tour_number="4900123", carrier_name="daniela Transporte GmbH")):
+        job = import_ladeliste_pdf(db_session, b"%PDF-fake", "ll.pdf", _storage(tmp_path), str(tmp_path / "reports"))
+    db_session.commit()
+
+    assert job.status == ImportJobStatus.SKIPPED_IRRELEVANT
+    assert db_session.execute(select(Tour)).scalars().first() is None
+
+
+def test_import_does_not_skip_other_49er_carriers(db_session, tmp_path):
+    with patch(_PATCH_TARGET, return_value=_make_parsed(tour_number="4914114", carrier_name="Stylinart")):
+        job = import_ladeliste_pdf(db_session, b"%PDF-fake", "ll.pdf", _storage(tmp_path), str(tmp_path / "reports"))
+    db_session.commit()
+
+    assert job.status != ImportJobStatus.SKIPPED_IRRELEVANT
+    assert db_session.execute(select(Tour)).scalars().one().tour_number == "4914114"
+
+
+def test_import_does_not_skip_daniela_outside_49er_prefix(db_session, tmp_path):
+    with patch(_PATCH_TARGET, return_value=_make_parsed(tour_number="1918622", carrier_name="Daniela")):
+        job = import_ladeliste_pdf(db_session, b"%PDF-fake", "ll.pdf", _storage(tmp_path), str(tmp_path / "reports"))
+    db_session.commit()
+
+    assert job.status != ImportJobStatus.SKIPPED_IRRELEVANT
+    assert db_session.execute(select(Tour)).scalars().one().tour_number == "1918622"

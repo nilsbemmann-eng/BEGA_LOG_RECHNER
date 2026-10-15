@@ -380,3 +380,41 @@ Ladelisten-Erstellung in einem externen Tool:
 Deutlich größerer Scope als der bisherige (reine Prüfung von Fremddaten)
 Frachtpreisrechner - als eigener Baustein auf demselben Datenmodell/derselben
 Engine geplant, noch nicht implementiert.
+
+## Ausschluss "Daniela"/49er-Ladelisten (Nutzervorgabe)
+
+**Vorgabe (23.09.2026):** "Spediteur 'Daniela' im Verbund mit 49er
+Ladelisten sind Rückholungen von Polstermöbeln von Kunden, für uns hier
+uninteressant." Auf Nachfrage bestätigt: automatisch ausschließen/
+überspringen, nicht nur mit Hinweis versehen.
+
+**Umsetzung:** `backend/app/services/ladeliste_pdf_import_service.py`
+(`_is_customer_return_pickup`) prüft beim PDF-Import vor Anlage einer
+`Tour`, ob die Ladelistennummer mit `49` beginnt **und** der geparste
+Spediteurname (Feld `Spediteur` auf der Ladeliste) den Text "daniela"
+enthält (case-insensitiv, Teilstring-Match - deckt z. B. auch
+"Daniela Transporte GmbH" ab). Trifft das zu, wird **keine** Tour/kein
+Shipment angelegt; der `ImportJob` bekommt den neuen Status
+`SKIPPED_IRRELEVANT` (Migration `b2d3e4f5a6b7`) mit Begründungstext statt
+`COMPLETED`/`FAILED`. Die Ausnahme gilt nur für den PDF-Upload-Pfad - es
+gibt (noch) keine automatisierte E-Mail-Postfach-Ladeliste-Erfassung, die
+denselben Pfad umgehen könnte.
+
+**Offen / zu bestätigen:**
+- Präfix `49` und das Schlüsselwort "daniela" sind aktuell als Konstanten
+  im Code hinterlegt, nicht als Stammdaten-Eintrag (anders als die
+  übrige Absender-Matrix/Sondervereinbarungen, die vollständig
+  DB-/Admincenter-gepflegt sind). Falls weitere ähnliche
+  Ausschlussregeln absehbar sind (andere Präfixe, andere Spediteure),
+  lohnt sich perspektivisch eine eigene, admin-pflegbare Tabelle nach
+  demselben Muster wie `TourOriginMapping`.
+- Nicht bestätigt: ob der exakte Spediteur-Name/-Code in den
+  Frachtführer-Stammdaten "Daniela" oder ein anderer, vollständigerer
+  Name/Carrier-Code ist (im Screenshot erschien u. a. "DANIELTRANS") -
+  der aktuelle Teilstring-Match auf "daniela" greift nur, wenn dieses
+  Wort tatsächlich so im Ladelisten-PDF-Feld "Spediteur" steht.
+- Nicht bestätigt: ob das ursprüngliche PDF bei einem automatischen
+  Ausschluss trotzdem archiviert werden soll (aktuell: nein, es wird gar
+  nicht erst gespeichert) - falls eine Nachvollziehbarkeit gewünscht ist,
+  müsste das PDF dennoch persistiert, aber ohne Tour/Shipment verknüpft
+  werden.
